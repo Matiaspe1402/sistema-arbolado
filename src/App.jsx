@@ -60,6 +60,7 @@ const I = {
   nota: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>,
   print: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
   patrimonio: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 22c4-4 8-8.5 8-13a8 8 0 1 0-16 0c0 4.5 4 9 8 13z"/><circle cx="12" cy="9" r="3"/></svg>,
+  personal: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
 };
 
 // ─── Helpers ───
@@ -71,17 +72,17 @@ const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto"
 
 const defaultState = {
   expedientes: [], compras: [], cajaChica: { presupuesto: 0, registros: [] },
-  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [],
+  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [], personal: [],
 };
 
 async function loadData() {
   try {
-    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas] = await Promise.all([
+    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal] = await Promise.all([
       sbList("expedientes"), sbList("patrimonio_vegetal"), sbList("compras"), sbList("caja_chica_registros"),
       sbGetPresupuesto(), sbList("tareas"), sbList("descansos"), sbList("licencias"), sbList("resoluciones"),
-      sbList("proveedores"), sbList("entregas"), sbList("notas"),
+      sbList("proveedores"), sbList("entregas"), sbList("notas"), sbList("personal"),
     ]);
-    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas };
+    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal };
   } catch (e) { console.error(e); return defaultState; }
 }
 
@@ -213,6 +214,7 @@ export default function App() {
       { id:"proveedores", label:"Proveedores", icon: I.proveedores },
     ]},
     { heading: "Recursos Humanos", items: [
+      { id:"personal", label:"Personal", icon: I.personal },
       { id:"descansos", label:"Descansos Comp.", icon: I.descanso },
       { id:"licencias", label:"Licencias", icon: I.licencia },
     ]},
@@ -272,6 +274,7 @@ export default function App() {
           {page==="cajaChica" && <CajaChicaPage data={data} up={up}/>}
           {page==="tareas" && <TareasPage data={data} up={up}/>}
           {page==="descansos" && <DescansosPage data={data} up={up}/>}
+          {page==="personal" && <PersonalPage data={data} up={up}/>}
           {page==="licencias" && <LicenciasPage data={data} up={up}/>}
           {page==="resoluciones" && <ResolucionesPage data={data} up={up}/>}
           {page==="proveedores" && <ProveedoresPage data={data} up={up} setPage={setPage}/>}
@@ -307,6 +310,7 @@ function Dashboard({ data, setPage }) {
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <StatCard label="Proveedores" value={data.proveedores.length} sub="Registrados" color="orange"/>
+        <StatCard label="Personal" value={(data.personal||[]).length} sub="Agentes registrados" color="purple"/>
         <StatCard label="Resoluciones" value={data.resoluciones.length} sub="En archivo" color="blue"/>
         <StatCard label="Descansos (mes)" value={descMes} sub={MESES[mes]} color="green"/>
         <StatCard label="Entregas" value={data.entregas.length} sub="Materiales entregados" color="orange"/>
@@ -1330,6 +1334,121 @@ function PatrimonioVegetal({ data, up }) {
         <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
       </Modal>
       <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este expediente"/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════
+// PERSONAL
+// ═══════════════════════════════
+function PersonalPage({ data, up }) {
+  const [search, setSearch] = useState("");
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [del, setDel] = useState(null);
+  const [verFicha, setVerFicha] = useState(null);
+  const empty = {
+    nombre:"", afiliado:"", fechaNacimiento:"", dni:"", telefono:"", domicilio:"", funcion:"",
+    talleCamisa:"", tallePantalon:"", talleCalzado:"", talleLluvia:"", talleFaja:"", observaciones:""
+  };
+  const [form, setForm] = useState(empty);
+
+  const list = useMemo(() => {
+    const q = search.toLowerCase();
+    return [...(data.personal||[])].reverse().filter(p =>
+      p.nombre.toLowerCase().includes(q) || (p.dni||"").toLowerCase().includes(q) || (p.afiliado||"").toLowerCase().includes(q) || (p.funcion||"").toLowerCase().includes(q)
+    );
+  }, [data.personal, search]);
+
+  const openNew = () => { setForm(empty); setEditing(null); setModal(true); };
+  const openEdit = (p) => { setForm({...p}); setEditing(p.id); setModal(true); };
+  const save = () => {
+    if(!form.nombre.trim()) return;
+    const id = editing || uid();
+    up(prev => editing
+      ? {...prev, personal:(prev.personal||[]).map(p=>p.id===editing?{...form,id}:p)}
+      : {...prev, personal:[...(prev.personal||[]),{...form,id}]}
+    );
+    (editing ? sbUpdate("personal", id, form) : sbInsert("personal", id, form));
+    setModal(false);
+  };
+  const remove = () => { up(prev=>({...prev, personal:(prev.personal||[]).filter(p=>p.id!==del)})); sbDelete("personal", del); setDel(null); };
+  const f = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  return (
+    <div>
+      <PageHeader title="Personal" sub="Legajo y datos del personal de la Dirección"><BtnNew onClick={openNew} label="Nuevo agente"/></PageHeader>
+      <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por nombre, DNI, afiliado o función..."/></div>
+
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
+        <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
+          <TH>Nombre y Apellido</TH><TH>DNI</TH><TH className="hidden sm:table-cell">N° Afiliado</TH><TH className="hidden md:table-cell">Función</TH><TH className="hidden lg:table-cell">Teléfono</TH><TH className="text-right">Acciones</TH>
+        </tr></thead><tbody className="divide-y divide-gray-50">
+          {list.length===0 ? <EmptyRow cols={6} text={search?"Sin resultados":"Sin personal registrado. Hacé clic en \"Nuevo agente\" para agregar uno."}/> : list.map(p => (
+            <tr key={p.id} className="hover:bg-gray-50/50 cursor-pointer" onClick={()=>setVerFicha(p)}>
+              <td className="px-4 py-3 font-medium text-gray-900">{p.nombre}</td>
+              <td className="px-4 py-3 text-gray-700">{p.dni||"—"}</td>
+              <td className="px-4 py-3 text-gray-700 hidden sm:table-cell">{p.afiliado||"—"}</td>
+              <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{p.funcion||"—"}</td>
+              <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{p.telefono||"—"}</td>
+              <td className="px-4 py-3 text-right" onClick={e=>e.stopPropagation()}><ActionBtns onEdit={()=>openEdit(p)} onDelete={()=>setDel(p.id)}/></td>
+            </tr>
+          ))}
+        </tbody></table>
+      </div></div>
+
+      {/* Ficha de detalle (talles y datos completos) */}
+      <Modal open={!!verFicha} onClose={()=>setVerFicha(null)} title={verFicha?.nombre || "Ficha del agente"} wide>
+        {verFicha && (
+          <div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
+              <div><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">DNI</p><p className="text-sm text-gray-900">{verFicha.dni||"—"}</p></div>
+              <div><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">N° Afiliado</p><p className="text-sm text-gray-900">{verFicha.afiliado||"—"}</p></div>
+              <div><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Fecha de nacimiento</p><p className="text-sm text-gray-900">{fmtDate(verFicha.fechaNacimiento)}</p></div>
+              <div><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Función</p><p className="text-sm text-gray-900">{verFicha.funcion||"—"}</p></div>
+              <div><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Teléfono</p><p className="text-sm text-gray-900">{verFicha.telefono||"—"}</p></div>
+              <div className="col-span-2"><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Domicilio</p><p className="text-sm text-gray-900">{verFicha.domicilio||"—"}</p></div>
+            </div>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 pb-1 border-b border-gray-100">Talles</p>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-4">
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Camisa</p><p className="text-sm font-bold text-gray-900">{verFicha.talleCamisa||"—"}</p></div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Pantalón</p><p className="text-sm font-bold text-gray-900">{verFicha.tallePantalon||"—"}</p></div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Calzado</p><p className="text-sm font-bold text-gray-900">{verFicha.talleCalzado||"—"}</p></div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Eq. lluvia</p><p className="text-sm font-bold text-gray-900">{verFicha.talleLluvia||"—"}</p></div>
+              <div className="bg-gray-50 rounded-xl p-3 text-center"><p className="text-[10px] font-semibold text-gray-400 uppercase mb-1">Faja lumbar</p><p className="text-sm font-bold text-gray-900">{verFicha.talleFaja||"—"}</p></div>
+            </div>
+            {verFicha.observaciones && (<div><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Observaciones</p><p className="text-sm text-gray-700">{verFicha.observaciones}</p></div>)}
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={()=>{ openEdit(verFicha); setVerFicha(null); }} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Editar</button>
+              <button onClick={()=>setVerFicha(null)} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Cerrar</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Formulario alta / edición */}
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar agente":"Nuevo agente"} wide>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Nombre y Apellido" span2><input className={inp} value={form.nombre} onChange={e=>f("nombre",e.target.value)} placeholder="Nombre completo"/></Field>
+          <Field label="N° de Afiliado"><input className={inp} value={form.afiliado} onChange={e=>f("afiliado",e.target.value)} placeholder="N° afiliado"/></Field>
+          <Field label="DNI"><input className={inp} value={form.dni} onChange={e=>f("dni",e.target.value)} placeholder="DNI"/></Field>
+          <Field label="Fecha de nacimiento"><input type="date" className={inp} value={form.fechaNacimiento} onChange={e=>f("fechaNacimiento",e.target.value)}/></Field>
+          <Field label="Teléfono"><input className={inp} value={form.telefono} onChange={e=>f("telefono",e.target.value)} placeholder="N° de teléfono"/></Field>
+          <Field label="Domicilio" span2><input className={inp} value={form.domicilio} onChange={e=>f("domicilio",e.target.value)} placeholder="Domicilio del agente"/></Field>
+          <Field label="Función" span2><input className={inp} value={form.funcion} onChange={e=>f("funcion",e.target.value)} placeholder="Ej: Podador, Chofer, Administrativo..."/></Field>
+
+          <div className="col-span-2 pt-2 pb-1"><p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1.5">Talles de indumentaria</p></div>
+          <Field label="Talle de camisa"><input className={inp} value={form.talleCamisa} onChange={e=>f("talleCamisa",e.target.value)} placeholder="Ej: M, 42..."/></Field>
+          <Field label="Talle de pantalón"><input className={inp} value={form.tallePantalon} onChange={e=>f("tallePantalon",e.target.value)} placeholder="Ej: 44..."/></Field>
+          <Field label="Talle de calzado"><input className={inp} value={form.talleCalzado} onChange={e=>f("talleCalzado",e.target.value)} placeholder="Ej: 42..."/></Field>
+          <Field label="Talle equipo de lluvia"><input className={inp} value={form.talleLluvia} onChange={e=>f("talleLluvia",e.target.value)} placeholder="Ej: L..."/></Field>
+          <Field label="Talle faja lumbar"><input className={inp} value={form.talleFaja} onChange={e=>f("talleFaja",e.target.value)} placeholder="Ej: M..."/></Field>
+
+          <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas adicionales..."/></Field>
+        </div>
+        <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
+      </Modal>
+      <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este agente"/>
     </div>
   );
 }

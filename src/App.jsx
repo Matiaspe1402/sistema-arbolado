@@ -61,6 +61,10 @@ const I = {
   print: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
   patrimonio: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 22c4-4 8-8.5 8-13a8 8 0 1 0-16 0c0 4.5 4 9 8 13z"/><circle cx="12" cy="9" r="3"/></svg>,
   personal: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  poda: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.12 15.88"/><path d="M14.47 14.48L20 20"/><path d="M8.12 8.12L12 12"/></svg>,
+  extraccion: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  plantacion: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 22V12"/><path d="M8 18l4-4 4 4"/><path d="M6 14l6-6 6 6"/><circle cx="12" cy="6" r="2"/></svg>,
+  tocon: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="7" y="10" width="10" height="9" rx="1"/><ellipse cx="12" cy="10" rx="5" ry="2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>,
 };
 
 // ─── Helpers ───
@@ -72,17 +76,17 @@ const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto"
 
 const defaultState = {
   expedientes: [], compras: [], cajaChica: { presupuesto: 0, registros: [] },
-  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [], personal: [],
+  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [], personal: [], gestionArbolado: [],
 };
 
 async function loadData() {
   try {
-    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal] = await Promise.all([
+    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado] = await Promise.all([
       sbList("expedientes"), sbList("patrimonio_vegetal"), sbList("compras"), sbList("caja_chica_registros"),
       sbGetPresupuesto(), sbList("tareas"), sbList("descansos"), sbList("licencias"), sbList("resoluciones"),
-      sbList("proveedores"), sbList("entregas"), sbList("notas"), sbList("personal"),
+      sbList("proveedores"), sbList("entregas"), sbList("notas"), sbList("personal"), sbList("gestion_arbolado"),
     ]);
-    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal };
+    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado };
   } catch (e) { console.error(e); return defaultState; }
 }
 
@@ -213,6 +217,12 @@ export default function App() {
       { id:"cajaChica", label:"Caja Chica", icon: I.caja },
       { id:"proveedores", label:"Proveedores", icon: I.proveedores },
     ]},
+    { heading: "Gestión del Arbolado", items: [
+      { id:"podas", label:"Podas", icon: I.poda },
+      { id:"extracciones", label:"Extracciones", icon: I.extraccion },
+      { id:"plantaciones", label:"Plantaciones", icon: I.plantacion },
+      { id:"tocones", label:"Tocones", icon: I.tocon },
+    ]},
     { heading: "Recursos Humanos", items: [
       { id:"personal", label:"Personal", icon: I.personal },
       { id:"descansos", label:"Descansos Comp.", icon: I.descanso },
@@ -275,6 +285,10 @@ export default function App() {
           {page==="tareas" && <TareasPage data={data} up={up}/>}
           {page==="descansos" && <DescansosPage data={data} up={up}/>}
           {page==="personal" && <PersonalPage data={data} up={up}/>}
+          {page==="podas" && <GestionArboladoPage data={data} up={up} tipo="podas" tipoLabel="Podas"/>}
+          {page==="extracciones" && <GestionArboladoPage data={data} up={up} tipo="extracciones" tipoLabel="Extracciones"/>}
+          {page==="plantaciones" && <GestionArboladoPage data={data} up={up} tipo="plantaciones" tipoLabel="Plantaciones"/>}
+          {page==="tocones" && <GestionArboladoPage data={data} up={up} tipo="tocones" tipoLabel="Tocones"/>}
           {page==="licencias" && <LicenciasPage data={data} up={up}/>}
           {page==="resoluciones" && <ResolucionesPage data={data} up={up}/>}
           {page==="proveedores" && <ProveedoresPage data={data} up={up} setPage={setPage}/>}
@@ -311,6 +325,7 @@ function Dashboard({ data, setPage }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <StatCard label="Proveedores" value={data.proveedores.length} sub="Registrados" color="orange"/>
         <StatCard label="Personal" value={(data.personal||[]).length} sub="Agentes registrados" color="purple"/>
+        <StatCard label="Gestión Arbolado" value={(data.gestionArbolado||[]).length} sub="Intervenciones totales" color="green"/>
         <StatCard label="Resoluciones" value={data.resoluciones.length} sub="En archivo" color="blue"/>
         <StatCard label="Descansos (mes)" value={descMes} sub={MESES[mes]} color="green"/>
         <StatCard label="Entregas" value={data.entregas.length} sub="Materiales entregados" color="orange"/>
@@ -1449,6 +1464,145 @@ function PersonalPage({ data, up }) {
         <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
       </Modal>
       <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este agente"/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════
+// GESTIÓN DEL ARBOLADO (Podas / Extracciones / Plantaciones / Tocones)
+// ═══════════════════════════════
+function GestionArboladoPage({ data, up, tipo, tipoLabel }) {
+  const [search, setSearch] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [del, setDel] = useState(null);
+
+  const responsables = {
+    direccion_arbolado: { l:"Dirección de Arbolado", c:"green" },
+    eco_poda: { l:"Eco Poda", c:"blue" },
+    tucu_poda: { l:"TucuPoda", c:"purple" },
+  };
+  const estados = {
+    iniciado: { l:"Iniciado", c:"gray" },
+    inspeccionado: { l:"Inspeccionado", c:"yellow" },
+    en_proceso: { l:"En proceso", c:"blue" },
+    derivado: { l:"Derivado", c:"orange" },
+    finalizado: { l:"Finalizado", c:"green" },
+  };
+
+  const empty = {
+    tipo, numeroReclamo:"", domicilio:"", fechaTrabajo:hoy(),
+    responsable:"direccion_arbolado", cuadrilla:"",
+    estado:"iniciado", inspector:"", destinoDerivado:"",
+    observaciones:""
+  };
+  const [form, setForm] = useState(empty);
+
+  const itemsDelTipo = useMemo(() => (data.gestionArbolado||[]).filter(g => g.tipo === tipo), [data.gestionArbolado, tipo]);
+
+  const list = useMemo(() => {
+    const q = search.toLowerCase();
+    return [...itemsDelTipo].reverse().filter(g => {
+      const matchSearch = (g.numeroReclamo||"").toLowerCase().includes(q) || (g.domicilio||"").toLowerCase().includes(q);
+      const matchEstado = filtroEstado === "todos" || g.estado === filtroEstado;
+      return matchSearch && matchEstado;
+    });
+  }, [itemsDelTipo, search, filtroEstado]);
+
+  const openNew = () => { setForm({...empty, tipo, fechaTrabajo:hoy()}); setEditing(null); setModal(true); };
+  const openEdit = (g) => { setForm({...g}); setEditing(g.id); setModal(true); };
+  const save = () => {
+    if(!form.numeroReclamo.trim()) return;
+    const id = editing || uid();
+    const item = {...form, tipo};
+    up(prev => editing
+      ? {...prev, gestionArbolado:(prev.gestionArbolado||[]).map(g=>g.id===editing?{...item,id}:g)}
+      : {...prev, gestionArbolado:[...(prev.gestionArbolado||[]),{...item,id}]}
+    );
+    (editing ? sbUpdate("gestion_arbolado", id, item) : sbInsert("gestion_arbolado", id, item));
+    setModal(false);
+  };
+  const remove = () => { up(prev=>({...prev, gestionArbolado:(prev.gestionArbolado||[]).filter(g=>g.id!==del)})); sbDelete("gestion_arbolado", del); setDel(null); };
+  const f = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const countPorEstado = Object.keys(estados).map(k => ({ key:k, ...estados[k], count: itemsDelTipo.filter(g=>g.estado===k).length }));
+
+  return (
+    <div>
+      <PageHeader title={tipoLabel} sub={`Seguimiento administrativo y operativo — ${tipoLabel.toLowerCase()}`}>
+        <BtnNew onClick={openNew} label={`Nuevo registro`}/>
+      </PageHeader>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+        {countPorEstado.map(c => (
+          <StatCard key={c.key} label={c.l} value={c.count} color={c.c}/>
+        ))}
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="max-w-sm flex-1"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por N° de reclamo o domicilio..."/></div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={()=>setFiltroEstado("todos")} className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${filtroEstado==="todos"?"bg-emerald-100 text-emerald-700":"bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>Todos</button>
+          {Object.entries(estados).map(([k,v])=>(
+            <button key={k} onClick={()=>setFiltroEstado(k)} className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${filtroEstado===k?"bg-emerald-100 text-emerald-700":"bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{v.l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
+        <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
+          <TH>N° Reclamo / Causante</TH><TH>Domicilio</TH><TH className="hidden sm:table-cell">Fecha</TH><TH className="hidden md:table-cell">Responsable</TH><TH className="text-center">Estado</TH><TH className="text-right">Acciones</TH>
+        </tr></thead><tbody className="divide-y divide-gray-50">
+          {list.length===0 ? <EmptyRow cols={6} text={search||filtroEstado!=="todos"?"Sin resultados":`Sin registros de ${tipoLabel.toLowerCase()}. Hacé clic en "Nuevo registro" para agregar uno.`}/> : list.map(g => (
+            <tr key={g.id} className="hover:bg-gray-50/50">
+              <td className="px-4 py-3 font-medium text-gray-900">{g.numeroReclamo}</td>
+              <td className="px-4 py-3 text-gray-700">{g.domicilio}</td>
+              <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{fmtDate(g.fechaTrabajo)}</td>
+              <td className="px-4 py-3 hidden md:table-cell">
+                <Badge label={responsables[g.responsable]?.l||g.responsable} color={responsables[g.responsable]?.c||"gray"}/>
+                {g.responsable==="direccion_arbolado" && g.cuadrilla && <span className="text-xs text-gray-400 ml-1.5">({g.cuadrilla})</span>}
+              </td>
+              <td className="px-4 py-3 text-center">
+                <Badge label={estados[g.estado]?.l||g.estado} color={estados[g.estado]?.c||"gray"}/>
+                {g.estado==="inspeccionado" && g.inspector && <p className="text-[10px] text-gray-400 mt-0.5">{g.inspector}</p>}
+                {g.estado==="derivado" && g.destinoDerivado && <p className="text-[10px] text-gray-400 mt-0.5">→ {g.destinoDerivado}</p>}
+              </td>
+              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(g)} onDelete={()=>setDel(g.id)}/></td>
+            </tr>
+          ))}
+        </tbody></table>
+      </div></div>
+
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?`Editar ${tipoLabel.slice(0,-1).toLowerCase()}`:`Nuevo registro de ${tipoLabel.toLowerCase()}`} wide>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="N° de Reclamo o Causante" span2><input className={inp} value={form.numeroReclamo} onChange={e=>f("numeroReclamo",e.target.value)} placeholder="Ej: 4521 o nombre del causante"/></Field>
+          <Field label="Domicilio" span2><input className={inp} value={form.domicilio} onChange={e=>f("domicilio",e.target.value)} placeholder="Domicilio de la intervención"/></Field>
+          <Field label="Fecha del trabajo"><input type="date" className={inp} value={form.fechaTrabajo} onChange={e=>f("fechaTrabajo",e.target.value)}/></Field>
+          <Field label="Responsable de la ejecución">
+            <select className={sel} value={form.responsable} onChange={e=>f("responsable",e.target.value)}>
+              {Object.entries(responsables).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+            </select>
+          </Field>
+          {form.responsable==="direccion_arbolado" && (
+            <Field label="Cuadrilla" span2><input className={inp} value={form.cuadrilla} onChange={e=>f("cuadrilla",e.target.value)} placeholder="Ej: Cuadrilla N°1"/></Field>
+          )}
+          <Field label="Estado del trámite">
+            <select className={sel} value={form.estado} onChange={e=>f("estado",e.target.value)}>
+              {Object.entries(estados).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+            </select>
+          </Field>
+          {form.estado==="inspeccionado" && (
+            <Field label="Inspector"><input className={inp} value={form.inspector} onChange={e=>f("inspector",e.target.value)} placeholder="Nombre del inspector"/></Field>
+          )}
+          {form.estado==="derivado" && (
+            <Field label="Destino de la derivación"><input className={inp} value={form.destinoDerivado} onChange={e=>f("destinoDerivado",e.target.value)} placeholder="Ej: Eco Poda, TucuPoda..."/></Field>
+          )}
+          <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas adicionales..."/></Field>
+        </div>
+        <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
+      </Modal>
+      <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este registro"/>
     </div>
   );
 }

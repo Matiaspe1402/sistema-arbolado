@@ -1288,21 +1288,31 @@ ${html.replace(/<html[^>]*>|<\/html>|<head>[\s\S]*?<\/head>/gi,'')}
 // ═══════════════════════════════
 function PatrimonioVegetal({ data, up }) {
   const [search, setSearch] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
-  const empty = { numero:"", causante:"", domicilio:"", fechaIngreso:hoy(), recibidoPor:"", area:"", observaciones:"" };
+  const empty = { numero:"", causante:"", domicilio:"", fechaIngreso:hoy(), recibidoPor:"", area:"", estado:"para_inspeccion", observaciones:"" };
   const [form, setForm] = useState(empty);
+
+  const estados = {
+    para_inspeccion: { l:"Para inspección", c:"blue" },
+    con_observacion: { l:"Con observación", c:"yellow" },
+    para_notificar: { l:"Para notificar", c:"orange" },
+    remitido_catastro: { l:"Remitido a Catastro", c:"green" },
+  };
 
   const list = useMemo(() => {
     const q = search.toLowerCase();
-    return [...(data.patrimonioVegetal||[])].reverse().filter(e =>
-      e.numero.toLowerCase().includes(q) || e.causante.toLowerCase().includes(q) || (e.domicilio||"").toLowerCase().includes(q)
-    );
-  }, [data.patrimonioVegetal, search]);
+    return [...(data.patrimonioVegetal||[])].reverse().filter(e => {
+      const matchSearch = e.numero.toLowerCase().includes(q) || e.causante.toLowerCase().includes(q) || (e.domicilio||"").toLowerCase().includes(q);
+      const matchEstado = filtroEstado === "todos" || e.estado === filtroEstado;
+      return matchSearch && matchEstado;
+    });
+  }, [data.patrimonioVegetal, search, filtroEstado]);
 
   const openNew = () => { setForm(empty); setEditing(null); setModal(true); };
-  const openEdit = (e) => { setForm({...e}); setEditing(e.id); setModal(true); };
+  const openEdit = (e) => { setForm({estado:"para_inspeccion", ...e}); setEditing(e.id); setModal(true); };
   const save = () => {
     if(!form.numero.trim()) return;
     const id = editing || uid();
@@ -1319,18 +1329,27 @@ function PatrimonioVegetal({ data, up }) {
   return (
     <div>
       <PageHeader title="Patrimonio Vegetal" sub="Registro de expedientes de Patrimonio Vegetal"><BtnNew onClick={openNew} label="Nuevo expediente"/></PageHeader>
-      <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por número, causante o domicilio..."/></div>
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="max-w-sm flex-1"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por número, causante o domicilio..."/></div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={()=>setFiltroEstado("todos")} className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${filtroEstado==="todos"?"bg-emerald-100 text-emerald-700":"bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>Todos</button>
+          {Object.entries(estados).map(([k,v])=>(
+            <button key={k} onClick={()=>setFiltroEstado(k)} className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${filtroEstado===k?"bg-emerald-100 text-emerald-700":"bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{v.l}</button>
+          ))}
+        </div>
+      </div>
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
-          <TH>N° Expediente</TH><TH>Causante</TH><TH>Domicilio</TH><TH className="hidden md:table-cell">Fecha</TH><TH className="hidden lg:table-cell">Recibido por</TH><TH className="text-right">Acciones</TH>
+          <TH>N° Expediente</TH><TH>Causante</TH><TH>Domicilio</TH><TH className="hidden md:table-cell">Fecha</TH><TH className="hidden lg:table-cell">Recibido por</TH><TH className="text-center">Estado</TH><TH className="text-right">Acciones</TH>
         </tr></thead><tbody className="divide-y divide-gray-50">
-          {list.length===0 ? <EmptyRow cols={6} text={search?"Sin resultados":"Sin expedientes de Patrimonio Vegetal registrados"}/> : list.map(e => (
+          {list.length===0 ? <EmptyRow cols={7} text={search||filtroEstado!=="todos"?"Sin resultados":"Sin expedientes de Patrimonio Vegetal registrados"}/> : list.map(e => (
             <tr key={e.id} className="hover:bg-gray-50/50">
               <td className="px-4 py-3 font-medium text-gray-900">{e.numero}</td>
               <td className="px-4 py-3 text-gray-700">{e.causante}</td>
               <td className="px-4 py-3 text-gray-600 max-w-[220px] truncate">{e.domicilio||"—"}</td>
               <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{fmtDate(e.fechaIngreso)}</td>
               <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{e.recibidoPor||"—"}</td>
+              <td className="px-4 py-3 text-center"><Badge label={estados[e.estado]?.l||"Para inspección"} color={estados[e.estado]?.c||"blue"}/></td>
               <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(e)} onDelete={()=>setDel(e.id)}/></td>
             </tr>
           ))}
@@ -1344,6 +1363,11 @@ function PatrimonioVegetal({ data, up }) {
           <Field label="Domicilio" span2><input className={inp} value={form.domicilio} onChange={e=>f("domicilio",e.target.value)} placeholder="Domicilio del inmueble o solicitante"/></Field>
           <Field label="Recibido por"><input className={inp} value={form.recibidoPor} onChange={e=>f("recibidoPor",e.target.value)} placeholder="Quién lo recibió"/></Field>
           <Field label="Área / Destino"><input className={inp} value={form.area} onChange={e=>f("area",e.target.value)} placeholder="Área de destino"/></Field>
+          <Field label="Estado del trámite" span2>
+            <select className={sel} value={form.estado} onChange={e=>f("estado",e.target.value)}>
+              {Object.entries(estados).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+            </select>
+          </Field>
           <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas..."/></Field>
         </div>
         <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>

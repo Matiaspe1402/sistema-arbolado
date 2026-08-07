@@ -7,33 +7,111 @@ const SUPABASE_URL = "https://lsbkfsdgvzemvjpfjgrq.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzYmtmc2RndnplbXZqcGZqZ3JxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4NTA4NjcsImV4cCI6MjEwMTQyNjg2N30.tZ12YU-jlkfUQmRJ715v1y9bfcEmJnn7A_UmJ4U0jP8";
 const sbHeaders = { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" };
 
+// ─── Sesión de usuario (token dinámico para Supabase Auth) ───
+let ACCESS_TOKEN = null;
+function setAccessToken(t) { ACCESS_TOKEN = t; }
+function authHeaders(extra) { return { apikey: SUPABASE_KEY, Authorization: `Bearer ${ACCESS_TOKEN || SUPABASE_KEY}`, "Content-Type": "application/json", ...extra }; }
+
+const SESSION_KEY = "arbolado_session";
+function saveSession(session, remember) {
+  const raw = JSON.stringify(session);
+  try {
+    if (remember) { localStorage.setItem(SESSION_KEY, raw); sessionStorage.removeItem(SESSION_KEY); }
+    else { sessionStorage.setItem(SESSION_KEY, raw); localStorage.removeItem(SESSION_KEY); }
+  } catch {}
+}
+function loadStoredSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function clearStoredSession() {
+  try { localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY); } catch {}
+}
+
+async function sbAuthLogin(email, password) {
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST", headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error_description || d.msg || "Usuario o contraseña incorrectos");
+  return d;
+}
+async function sbAuthRefresh(refresh_token) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST", headers: { apikey: SUPABASE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token }),
+    });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+async function sbGetProfile(userId, accessToken) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}&select=*`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${accessToken}` },
+    });
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return rows[0] || null;
+  } catch { return null; }
+}
+async function sbListProfiles() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&order=nombre.asc`, { headers: authHeaders() });
+    if (!r.ok) return [];
+    return await r.json();
+  } catch { return []; }
+}
+async function sbUpdateProfile(id, patch) {
+  try { await fetch(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${id}`, { method: "PATCH", headers: { ...authHeaders(), Prefer: "return=minimal" }, body: JSON.stringify(patch) }); } catch (e) { console.error(e); }
+}
+
+async function sbRpc(fnName, params) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, { method: "POST", headers: sbHeaders, body: JSON.stringify(params || {}) });
+    const json = await r.json().catch(() => null);
+    if (!r.ok) return { error: json?.message || "Error de conexión" };
+    return { data: json };
+  } catch (e) { return { error: "Error de conexión" }; }
+}
+
+// ─── Usuario autenticado (usado para auditoría automática) ───
+let CURRENT_USER = null;
+function setCurrentUserRef(u) { CURRENT_USER = u; }
+
 async function sbList(table) {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=created_at.asc`, { headers: sbHeaders });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=created_at.asc`, { headers: authHeaders() });
     if (!r.ok) return [];
     const rows = await r.json();
     return rows.map(row => ({ ...row.data, id: row.id }));
   } catch { return []; }
 }
 async function sbInsert(table, id, itemData) {
-  try { await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { ...sbHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ id, data: itemData }) }); } catch (e) { console.error(e); }
+  const withAudit = { ...itemData, _creadoPor: CURRENT_USER?.nombre || null, _creadoPorId: CURRENT_USER?.id || null, _creadoEn: new Date().toISOString() };
+  try { await fetch(`${SUPABASE_URL}/rest/v1/${table}`, { method: "POST", headers: { ...authHeaders(), Prefer: "return=minimal" }, body: JSON.stringify({ id, data: withAudit }) }); } catch (e) { console.error(e); }
 }
 async function sbUpdate(table, id, itemData) {
-  try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "PATCH", headers: { ...sbHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ data: itemData }) }); } catch (e) { console.error(e); }
+  const withAudit = { ...itemData, _actualizadoPor: CURRENT_USER?.nombre || null, _actualizadoPorId: CURRENT_USER?.id || null, _actualizadoEn: new Date().toISOString() };
+  try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "PATCH", headers: { ...authHeaders(), Prefer: "return=minimal" }, body: JSON.stringify({ data: withAudit }) }); } catch (e) { console.error(e); }
 }
 async function sbDelete(table, id) {
-  try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "DELETE", headers: sbHeaders }); } catch (e) { console.error(e); }
+  try { await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${id}`, { method: "DELETE", headers: authHeaders() }); } catch (e) { console.error(e); }
 }
 async function sbGetPresupuesto() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/caja_chica_config?id=eq.main&select=presupuesto`, { headers: sbHeaders });
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/caja_chica_config?id=eq.main&select=presupuesto`, { headers: authHeaders() });
     if (!r.ok) return 0;
     const rows = await r.json();
     return rows[0]?.presupuesto || 0;
   } catch { return 0; }
 }
 async function sbSetPresupuesto(presupuesto) {
-  try { await fetch(`${SUPABASE_URL}/rest/v1/caja_chica_config?id=eq.main`, { method: "PATCH", headers: { ...sbHeaders, Prefer: "return=minimal" }, body: JSON.stringify({ presupuesto }) }); } catch (e) { console.error(e); }
+  try { await fetch(`${SUPABASE_URL}/rest/v1/caja_chica_config?id=eq.main`, { method: "PATCH", headers: { ...authHeaders(), Prefer: "return=minimal" }, body: JSON.stringify({ presupuesto }) }); } catch (e) { console.error(e); }
 }
 
 // ─── Icons ───
@@ -73,6 +151,15 @@ const hoy = () => new Date().toISOString().split("T")[0];
 const fmtDate = (d) => { if (!d) return "—"; const p = d.split("-"); return `${p[2]}/${p[1]}/${p[0]}`; };
 const fmtMoney = (n) => "$" + (parseFloat(n) || 0).toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+// ─── Integración Expedientes ↔ Patrimonio Vegetal ───
+const PV_ESTADOS = {
+  para_inspeccion: { l:"Para inspección", c:"blue" },
+  con_observacion: { l:"Con observación", c:"yellow" },
+  para_notificar: { l:"Para notificar", c:"orange" },
+  remitido_catastro: { l:"Remitido a Catastro", c:"green" },
+};
+const esAsuntoPatrimonioVegetal = (asunto) => (asunto||"").toLowerCase().includes("patrimonio vegetal");
 
 const defaultState = {
   expedientes: [], compras: [], cajaChica: { presupuesto: 0, registros: [] },
@@ -150,6 +237,52 @@ function StatCard({ label, value, sub, color }) {
   );
 }
 
+// ═══════════════════════════════
+// PANTALLA DE LOGIN
+// ═══════════════════════════════
+function LoginScreen({ onLogin }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (ev) => {
+    ev.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      await onLogin(email.trim(), password, remember);
+    } catch (e) {
+      setError(e.message || "No se pudo iniciar sesión");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="flex items-center justify-center h-screen bg-gray-50 px-4">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 bg-emerald-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-4">{I.tree}</div>
+          <h1 className="text-lg font-bold text-gray-900">Dirección de Arbolado</h1>
+          <p className="text-xs text-gray-400 uppercase tracking-[0.15em] font-semibold mt-1">Municipalidad de San Miguel de Tucumán</p>
+        </div>
+        <form onSubmit={submit} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+          <Field label="Usuario (email)"><input type="email" required className={inp} value={email} onChange={e=>setEmail(e.target.value)} placeholder="usuario@arbolado.gob.ar" autoFocus/></Field>
+          <Field label="Contraseña"><input type="password" required className={inp} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••"/></Field>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"/>
+            <span className="text-sm text-gray-600">Recordarme en este dispositivo</span>
+          </label>
+          {error && <p className="text-sm text-rose-600 bg-rose-50 rounded-lg px-3 py-2">{error}</p>}
+          <button type="submit" disabled={loading} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-60">
+            {loading ? "Ingresando..." : "Iniciar sesión"}
+          </button>
+        </form>
+        <p className="text-center text-xs text-gray-400 mt-5">¿No tenés cuenta? Pedile a un administrador que te la cree.</p>
+      </div>
+    </div>
+  );
+}
+
 function PageHeader({ title, sub, children }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -195,14 +328,57 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [session, setSession] = useState(null); // { access_token, refresh_token, user }
+  const [profile, setProfile] = useState(null); // { id, email, nombre, rol }
+  const [authLoading, setAuthLoading] = useState(true);
 
-  useEffect(() => { loadData().then(d => { setData(d); setLoading(false); }); }, []);
+  // Al cargar la app: revisar si hay una sesión guardada y validarla
+  useEffect(() => {
+    (async () => {
+      const stored = loadStoredSession();
+      if (!stored) { setAuthLoading(false); return; }
+      const refreshed = await sbAuthRefresh(stored.refresh_token);
+      if (!refreshed) { clearStoredSession(); setAuthLoading(false); return; }
+      const remembered = !!localStorage.getItem(SESSION_KEY);
+      saveSession(refreshed, remembered);
+      setAccessToken(refreshed.access_token);
+      const prof = await sbGetProfile(refreshed.user.id, refreshed.access_token);
+      const fullProfile = prof || { id: refreshed.user.id, email: refreshed.user.email, nombre: refreshed.user.email, rol: "administrativo" };
+      setCurrentUserRef(fullProfile);
+      setSession(refreshed);
+      setProfile(fullProfile);
+      setAuthLoading(false);
+    })();
+  }, []);
+
+  const handleLogin = async (email, password, remember) => {
+    const s = await sbAuthLogin(email, password);
+    setAccessToken(s.access_token);
+    const prof = await sbGetProfile(s.user.id, s.access_token);
+    const fullProfile = prof || { id: s.user.id, email: s.user.email, nombre: s.user.email, rol: "administrativo" };
+    saveSession(s, remember);
+    setCurrentUserRef(fullProfile);
+    setSession(s);
+    setProfile(fullProfile);
+  };
+  const handleLogout = () => {
+    clearStoredSession();
+    setAccessToken(null);
+    setCurrentUserRef(null);
+    setSession(null);
+    setProfile(null);
+  };
+
+  useEffect(() => { if (session) loadData().then(d => { setData(d); setLoading(false); }); }, [session]);
   // Sincroniza con el equipo cada 12 segundos para ver cambios de otros usuarios
   useEffect(() => {
+    if (!session) return;
     const interval = setInterval(() => { loadData().then(setData); }, 12000);
     return () => clearInterval(interval);
-  }, []);
+  }, [session]);
   const up = useCallback((fn) => { setData(prev => fn(prev)); }, []);
+
+  const ROLES = { administrador:"Administrador", director:"Director", administrativo:"Administrativo", inspector:"Inspector" };
 
   const sections = [
     { heading: "General", items: [
@@ -233,8 +409,13 @@ export default function App() {
       { id:"entregas", label:"Entrega de Materiales", icon: I.entregas },
     ]},
   ];
+  if (profile?.rol === "administrador") {
+    sections.push({ heading: "Administración", items: [ { id:"usuarios", label:"Usuarios", icon: I.personal } ] });
+  }
   const allItems = sections.flatMap(s => s.items);
 
+  if (authLoading) return <div className="flex items-center justify-center h-screen bg-gray-50"><div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/></div>;
+  if (!session) return <LoginScreen onLogin={handleLogin}/>;
   if (loading) return <div className="flex items-center justify-center h-screen bg-gray-50"><div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"/></div>;
 
   return (
@@ -266,6 +447,15 @@ export default function App() {
           ))}
         </nav>
         <div className="px-4 py-3 border-t border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-800 truncate">{profile?.nombre || profile?.email}</p>
+              <p className="text-[10px] text-emerald-600 font-medium">{ROLES[profile?.rol] || "Administrativo"}</p>
+            </div>
+            <button onClick={handleLogout} title="Cerrar sesión" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-rose-500 transition-colors">
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            </button>
+          </div>
           <p className="text-[9px] text-gray-300 uppercase tracking-[0.15em]">Sistema Administrativo v2</p>
         </div>
       </aside>
@@ -289,6 +479,7 @@ export default function App() {
           {page==="extracciones" && <GestionArboladoPage data={data} up={up} tipo="extracciones" tipoLabel="Extracciones"/>}
           {page==="plantaciones" && <GestionArboladoPage data={data} up={up} tipo="plantaciones" tipoLabel="Plantaciones"/>}
           {page==="tocones" && <GestionArboladoPage data={data} up={up} tipo="tocones" tipoLabel="Tocones"/>}
+          {page==="usuarios" && <UsuariosPage/>}
           {page==="licencias" && <LicenciasPage data={data} up={up}/>}
           {page==="resoluciones" && <ResolucionesPage data={data} up={up}/>}
           {page==="proveedores" && <ProveedoresPage data={data} up={up} setPage={setPage}/>}
@@ -375,7 +566,7 @@ function Expedientes({ data, up }) {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
-  const empty = { numero:"", causante:"", asunto:"", fechaIngreso:hoy(), recibidoPor:"", area:"", observaciones:"" };
+  const empty = { numero:"", causante:"", asunto:"", fechaIngreso:hoy(), recibidoPor:"", area:"", domicilio:"", estado:"para_inspeccion", observaciones:"" };
   const [form, setForm] = useState(empty);
 
   const list = useMemo(() => {
@@ -383,8 +574,10 @@ function Expedientes({ data, up }) {
     return [...data.expedientes].reverse().filter(e => e.numero.toLowerCase().includes(q)||e.causante.toLowerCase().includes(q)||e.asunto.toLowerCase().includes(q));
   }, [data.expedientes, search]);
 
+  const esPV = esAsuntoPatrimonioVegetal(form.asunto);
+
   const openNew = () => { setForm(empty); setEditing(null); setModal(true); };
-  const openEdit = (e) => { setForm({...e}); setEditing(e.id); setModal(true); };
+  const openEdit = (e) => { setForm({estado:"para_inspeccion", domicilio:"", ...e}); setEditing(e.id); setModal(true); };
   const save = () => { if(!form.numero.trim()) return; const id = editing || uid(); up(p => editing ? {...p,expedientes:p.expedientes.map(e=>e.id===editing?{...form,id}:e)} : {...p,expedientes:[...p.expedientes,{...form,id}]}); (editing ? sbUpdate("expedientes", id, form) : sbInsert("expedientes", id, form)); setModal(false); };
   const remove = () => { up(p=>({...p,expedientes:p.expedientes.filter(e=>e.id!==del)})); sbDelete("expedientes", del); setDel(null); };
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
@@ -401,7 +594,10 @@ function Expedientes({ data, up }) {
             <tr key={e.id} className="hover:bg-gray-50/50">
               <td className="px-4 py-3 font-medium text-gray-900">{e.numero}</td>
               <td className="px-4 py-3 text-gray-700">{e.causante}</td>
-              <td className="px-4 py-3 text-gray-600 max-w-[250px] truncate">{e.asunto}</td>
+              <td className="px-4 py-3 text-gray-600 max-w-[250px] truncate">
+                {e.asunto}
+                {esAsuntoPatrimonioVegetal(e.asunto) && <span className="ml-2 inline-block align-middle"><Badge label="Patrimonio Vegetal" color="green"/></span>}
+              </td>
               <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{fmtDate(e.fechaIngreso)}</td>
               <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{e.recibidoPor||"—"}</td>
               <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(e)} onDelete={()=>setDel(e.id)}/></td>
@@ -414,9 +610,22 @@ function Expedientes({ data, up }) {
           <Field label="N° Expediente"><input className={inp} value={form.numero} onChange={e=>f("numero",e.target.value)} placeholder="Ej: 1234/2026"/></Field>
           <Field label="Fecha de ingreso"><input type="date" className={inp} value={form.fechaIngreso} onChange={e=>f("fechaIngreso",e.target.value)}/></Field>
           <Field label="Causante" span2><input className={inp} value={form.causante} onChange={e=>f("causante",e.target.value)} placeholder="Nombre del causante"/></Field>
-          <Field label="Asunto" span2><input className={inp} value={form.asunto} onChange={e=>f("asunto",e.target.value)} placeholder="Descripción del asunto"/></Field>
+          <Field label="Asunto" span2>
+            <input className={inp} value={form.asunto} onChange={e=>f("asunto",e.target.value)} placeholder="Descripción del asunto"/>
+            {esPV && <p className="text-[11px] text-emerald-600 font-medium mt-1.5">✓ Este expediente se vinculará automáticamente al módulo Patrimonio Vegetal</p>}
+          </Field>
           <Field label="Recibido por"><input className={inp} value={form.recibidoPor} onChange={e=>f("recibidoPor",e.target.value)} placeholder="Quién lo recibió"/></Field>
           <Field label="Área / Destino"><input className={inp} value={form.area} onChange={e=>f("area",e.target.value)} placeholder="Área de destino"/></Field>
+          {esPV && (
+            <>
+              <Field label="Domicilio" span2><input className={inp} value={form.domicilio} onChange={e=>f("domicilio",e.target.value)} placeholder="Domicilio del inmueble o solicitante"/></Field>
+              <Field label="Estado del trámite (Patrimonio Vegetal)" span2>
+                <select className={sel} value={form.estado} onChange={e=>f("estado",e.target.value)}>
+                  {Object.entries(PV_ESTADOS).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+                </select>
+              </Field>
+            </>
+          )}
           <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas..."/></Field>
         </div>
         <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
@@ -1627,6 +1836,50 @@ function GestionArboladoPage({ data, up, tipo, tipoLabel }) {
         <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
       </Modal>
       <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este registro"/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════
+// USUARIOS (solo Administrador)
+// ═══════════════════════════════
+function UsuariosPage() {
+  const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const ROLES = { administrador:"Administrador", director:"Director", administrativo:"Administrativo", inspector:"Inspector" };
+
+  const cargar = () => { setLoading(true); sbListProfiles().then(u => { setUsuarios(u); setLoading(false); }); };
+  useEffect(() => { cargar(); }, []);
+
+  const cambiarRol = async (id, rol) => {
+    setUsuarios(prev => prev.map(u => u.id===id ? {...u, rol} : u));
+    await sbUpdateProfile(id, { rol });
+  };
+
+  return (
+    <div>
+      <PageHeader title="Usuarios" sub="Gestión de usuarios y roles del sistema"/>
+      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6">
+        <p className="text-sm text-blue-800 font-medium mb-1">Para crear un usuario nuevo:</p>
+        <p className="text-sm text-blue-700">Andá a Supabase → Authentication → Users → "Add user", cargá su email y una contraseña provisoria. En cuanto inicie sesión por primera vez va a aparecer automáticamente en esta lista, y desde acá le podés asignar su rol.</p>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
+        <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
+          <TH>Nombre</TH><TH>Email</TH><TH>Rol</TH>
+        </tr></thead><tbody className="divide-y divide-gray-50">
+          {loading ? <EmptyRow cols={3} text="Cargando..."/> : usuarios.length===0 ? <EmptyRow cols={3} text="Sin usuarios registrados todavía"/> : usuarios.map(u => (
+            <tr key={u.id} className="hover:bg-gray-50/50">
+              <td className="px-4 py-3 font-medium text-gray-900">{u.nombre || "—"}</td>
+              <td className="px-4 py-3 text-gray-600">{u.email}</td>
+              <td className="px-4 py-3">
+                <select className={sel + " max-w-[180px]"} value={u.rol||"administrativo"} onChange={e=>cambiarRol(u.id, e.target.value)}>
+                  {Object.entries(ROLES).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+                </select>
+              </td>
+            </tr>
+          ))}
+        </tbody></table>
+      </div></div>
     </div>
   );
 }

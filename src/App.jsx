@@ -591,12 +591,14 @@ function Expedientes({ data, up }) {
           <TH>N° Expediente</TH><TH>Causante</TH><TH>Asunto</TH><TH className="hidden md:table-cell">Fecha</TH><TH className="hidden lg:table-cell">Recibido por</TH><TH className="text-right">Acciones</TH>
         </tr></thead><tbody className="divide-y divide-gray-50">
           {list.length===0 ? <EmptyRow cols={6} text={search?"Sin resultados":"Sin expedientes registrados"}/> : list.map(e => (
-            <tr key={e.id} className="hover:bg-gray-50/50">
+            <tr key={e.id} className={`hover:bg-gray-50/50 ${esAsuntoPatrimonioVegetal(e.asunto)?"border-l-4 border-l-emerald-400":""}`}>
               <td className="px-4 py-3 font-medium text-gray-900">{e.numero}</td>
               <td className="px-4 py-3 text-gray-700">{e.causante}</td>
-              <td className="px-4 py-3 text-gray-600 max-w-[250px] truncate">
-                {e.asunto}
-                {esAsuntoPatrimonioVegetal(e.asunto) && <span className="ml-2 inline-block align-middle"><Badge label="Patrimonio Vegetal" color="green"/></span>}
+              <td className="px-4 py-3 text-gray-600">
+                <div className="flex items-center gap-2">
+                  <span className="max-w-[180px] truncate">{e.asunto}</span>
+                  {esAsuntoPatrimonioVegetal(e.asunto) && <span className="shrink-0"><Badge label="Patrimonio Vegetal" color="green"/></span>}
+                </div>
               </td>
               <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{fmtDate(e.fechaIngreso)}</td>
               <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{e.recibidoPor||"—"}</td>
@@ -1501,69 +1503,115 @@ function PatrimonioVegetal({ data, up }) {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
-  const empty = { numero:"", causante:"", domicilio:"", fechaIngreso:hoy(), recibidoPor:"", area:"", estado:"para_inspeccion", observaciones:"" };
+  const empty = { numero:"", causante:"", asunto:"Patrimonio Vegetal", domicilio:"", fechaIngreso:hoy(), recibidoPor:"", area:"", estado:"para_inspeccion", observaciones:"" };
   const [form, setForm] = useState(empty);
 
-  const estados = {
-    para_inspeccion: { l:"Para inspección", c:"blue" },
-    con_observacion: { l:"Con observación", c:"yellow" },
-    para_notificar: { l:"Para notificar", c:"orange" },
-    remitido_catastro: { l:"Remitido a Catastro", c:"green" },
-  };
+  // Vinculados automáticamente: expedientes cuyo asunto es "Patrimonio Vegetal" (misma fuente de datos, sin duplicar)
+  const vinculados = useMemo(() =>
+    data.expedientes.filter(e => esAsuntoPatrimonioVegetal(e.asunto)).map(e => ({ ...e, source:"expediente" })),
+  [data.expedientes]);
+  // Registros anteriores creados directamente en este módulo, antes de la integración
+  const legacy = useMemo(() => (data.patrimonioVegetal||[]).map(p => ({ ...p, source:"legacy" })), [data.patrimonioVegetal]);
+
+  const combined = useMemo(() => {
+    const vistos = new Set();
+    const resultado = [];
+    // Prioridad: primero los vinculados a Expedientes (fuente única de verdad)
+    for (const e of vinculados) {
+      const key = (e.numero||"").trim().toLowerCase();
+      if (!vistos.has(key)) { vistos.add(key); resultado.push(e); }
+    }
+    // Los "legacy" solo se muestran si su número NO coincide con un expediente ya vinculado (evita duplicados)
+    for (const e of legacy) {
+      const key = (e.numero||"").trim().toLowerCase();
+      if (!vistos.has(key)) { vistos.add(key); resultado.push(e); }
+    }
+    return resultado.reverse();
+  }, [vinculados, legacy]);
 
   const list = useMemo(() => {
     const q = search.toLowerCase();
-    return [...(data.patrimonioVegetal||[])].reverse().filter(e => {
+    return combined.filter(e => {
       const matchSearch = e.numero.toLowerCase().includes(q) || e.causante.toLowerCase().includes(q) || (e.domicilio||"").toLowerCase().includes(q);
-      const matchEstado = filtroEstado === "todos" || e.estado === filtroEstado;
+      const matchEstado = filtroEstado === "todos" || (e.estado||"para_inspeccion") === filtroEstado;
       return matchSearch && matchEstado;
     });
-  }, [data.patrimonioVegetal, search, filtroEstado]);
+  }, [combined, search, filtroEstado]);
 
   const openNew = () => { setForm(empty); setEditing(null); setModal(true); };
-  const openEdit = (e) => { setForm({estado:"para_inspeccion", ...e}); setEditing(e.id); setModal(true); };
+  const openEdit = (e) => { setForm({estado:"para_inspeccion", domicilio:"", ...e}); setEditing(e); setModal(true); };
+
   const save = () => {
     if(!form.numero.trim()) return;
-    const id = editing || uid();
-    up(p => editing
-      ? {...p, patrimonioVegetal:(p.patrimonioVegetal||[]).map(e=>e.id===editing?{...form,id}:e)}
-      : {...p, patrimonioVegetal:[...(p.patrimonioVegetal||[]),{...form,id}]}
-    );
-    (editing ? sbUpdate("patrimonio_vegetal", id, form) : sbInsert("patrimonio_vegetal", id, form));
+    if (editing) {
+      const id = editing.id;
+      if (editing.source === "expediente") {
+        const item = {...form, asunto: form.asunto || "Patrimonio Vegetal"};
+        up(p => ({...p, expedientes:p.expedientes.map(e=>e.id===id?{...item,id}:e)}));
+        sbUpdate("expedientes", id, item);
+      } else {
+        up(p => ({...p, patrimonioVegetal:(p.patrimonioVegetal||[]).map(e=>e.id===id?{...form,id}:e)}));
+        sbUpdate("patrimonio_vegetal", id, form);
+      }
+    } else {
+      // Nuevo registro: se crea directamente como Expediente con Asunto "Patrimonio Vegetal" para quedar vinculado automáticamente
+      const id = uid();
+      const item = {...form, asunto: "Patrimonio Vegetal"};
+      up(p => ({...p, expedientes:[...p.expedientes,{...item,id}]}));
+      sbInsert("expedientes", id, item);
+    }
     setModal(false);
   };
-  const remove = () => { up(p=>({...p, patrimonioVegetal:(p.patrimonioVegetal||[]).filter(e=>e.id!==del)})); sbDelete("patrimonio_vegetal", del); setDel(null); };
+
+  const remove = () => {
+    if (del.source === "expediente") {
+      up(p=>({...p, expedientes:p.expedientes.filter(e=>e.id!==del.id)}));
+      sbDelete("expedientes", del.id);
+    } else {
+      up(p=>({...p, patrimonioVegetal:(p.patrimonioVegetal||[]).filter(e=>e.id!==del.id)}));
+      sbDelete("patrimonio_vegetal", del.id);
+    }
+    setDel(null);
+  };
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
   return (
     <div>
-      <PageHeader title="Patrimonio Vegetal" sub="Registro de expedientes de Patrimonio Vegetal"><BtnNew onClick={openNew} label="Nuevo expediente"/></PageHeader>
+      <div className="flex items-center gap-2.5 mb-1">
+        <span className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">{I.patrimonio}</span>
+        <h2 className="text-2xl font-bold text-gray-900">Patrimonio Vegetal</h2>
+      </div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <p className="text-sm text-gray-500">Vinculado automáticamente con Expedientes cuyo Asunto sea "Patrimonio Vegetal"</p>
+        <div className="flex-shrink-0"><BtnNew onClick={openNew} label="Nuevo expediente"/></div>
+      </div>
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="max-w-sm flex-1"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por número, causante o domicilio..."/></div>
         <div className="flex gap-1.5 flex-wrap">
           <button onClick={()=>setFiltroEstado("todos")} className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${filtroEstado==="todos"?"bg-emerald-100 text-emerald-700":"bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>Todos</button>
-          {Object.entries(estados).map(([k,v])=>(
+          {Object.entries(PV_ESTADOS).map(([k,v])=>(
             <button key={k} onClick={()=>setFiltroEstado(k)} className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors ${filtroEstado===k?"bg-emerald-100 text-emerald-700":"bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>{v.l}</button>
           ))}
         </div>
       </div>
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
-        <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
-          <TH>N° Expediente</TH><TH>Causante</TH><TH>Domicilio</TH><TH className="hidden md:table-cell">Fecha</TH><TH className="hidden lg:table-cell">Recibido por</TH><TH className="text-center">Estado</TH><TH className="text-right">Acciones</TH>
+      <div className="bg-white rounded-xl border-2 border-emerald-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
+        <table className="w-full text-sm"><thead><tr className="border-b border-emerald-100 bg-emerald-50/50">
+          <TH>N° Expediente</TH><TH>Causante</TH><TH className="hidden sm:table-cell">Domicilio</TH><TH className="hidden md:table-cell">Fecha</TH><TH className="hidden lg:table-cell">Recibido por</TH><TH className="text-center">Estado</TH><TH className="text-right">Acciones</TH>
         </tr></thead><tbody className="divide-y divide-gray-50">
           {list.length===0 ? <EmptyRow cols={7} text={search||filtroEstado!=="todos"?"Sin resultados":"Sin expedientes de Patrimonio Vegetal registrados"}/> : list.map(e => (
-            <tr key={e.id} className="hover:bg-gray-50/50">
+            <tr key={e.id} className="hover:bg-emerald-50/30 border-l-4 border-l-emerald-400">
               <td className="px-4 py-3 font-medium text-gray-900">{e.numero}</td>
               <td className="px-4 py-3 text-gray-700">{e.causante}</td>
-              <td className="px-4 py-3 text-gray-600 max-w-[220px] truncate">{e.domicilio||"—"}</td>
+              <td className="px-4 py-3 text-gray-600 hidden sm:table-cell max-w-[200px] truncate">{e.domicilio||"—"}</td>
               <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{fmtDate(e.fechaIngreso)}</td>
               <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{e.recibidoPor||"—"}</td>
-              <td className="px-4 py-3 text-center"><Badge label={estados[e.estado]?.l||"Para inspección"} color={estados[e.estado]?.c||"blue"}/></td>
-              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(e)} onDelete={()=>setDel(e.id)}/></td>
+              <td className="px-4 py-3 text-center"><Badge label={PV_ESTADOS[e.estado]?.l||"Para inspección"} color={PV_ESTADOS[e.estado]?.c||"blue"}/></td>
+              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(e)} onDelete={()=>setDel(e)}/></td>
             </tr>
           ))}
         </tbody></table>
       </div></div>
+      <p className="text-xs text-gray-400 mt-3 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block"/> Cada fila es el mismo registro que en Expedientes — se edita o elimina desde cualquiera de los dos módulos y el cambio se refleja en ambos.</p>
       <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar expediente":"Nuevo expediente de Patrimonio Vegetal"}>
         <div className="grid grid-cols-2 gap-4">
           <Field label="N° Expediente"><input className={inp} value={form.numero} onChange={e=>f("numero",e.target.value)} placeholder="Ej: 1234/2026"/></Field>
@@ -1574,7 +1622,7 @@ function PatrimonioVegetal({ data, up }) {
           <Field label="Área / Destino"><input className={inp} value={form.area} onChange={e=>f("area",e.target.value)} placeholder="Área de destino"/></Field>
           <Field label="Estado del trámite" span2>
             <select className={sel} value={form.estado} onChange={e=>f("estado",e.target.value)}>
-              {Object.entries(estados).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+              {Object.entries(PV_ESTADOS).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
             </select>
           </Field>
           <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas..."/></Field>

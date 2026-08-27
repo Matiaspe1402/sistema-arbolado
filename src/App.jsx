@@ -563,12 +563,125 @@ function Dashboard({ data, setPage }) {
   const tActivas = data.tareas.filter(t=>t.estado!=="realizada").length;
   const descMes = data.descansos.filter(d => { const f = d.fecha; if(!f) return false; return parseInt(f.split("-")[1])===mes+1; }).length;
 
+  // ─── Cumpleaños próximos (7 días, con manejo de cambio de año) ───
+  const cumples = useMemo(() => {
+    const hoyDate = new Date();
+    hoyDate.setHours(0,0,0,0);
+    const personal = data.personal || [];
+    const DIAS_RANGO = 7;
+    const resultados = [];
+
+    personal.forEach(p => {
+      if (!p.fechaNacimiento) return;
+      const partes = p.fechaNacimiento.split("-");
+      if (partes.length < 3) return;
+      const mesNac = parseInt(partes[1], 10);
+      const diaNac = parseInt(partes[2], 10);
+
+      // Probar este año y el siguiente (para el cruce dic→ene)
+      for (let offset = 0; offset <= 1; offset++) {
+        const cumple = new Date(hoyDate.getFullYear() + offset, mesNac - 1, diaNac);
+        cumple.setHours(0,0,0,0);
+        const diffMs = cumple.getTime() - hoyDate.getTime();
+        const diffDias = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        if (diffDias >= 0 && diffDias <= DIAS_RANGO) {
+          resultados.push({ ...p, cumpleFecha: cumple, diffDias });
+          break;
+        }
+      }
+    });
+
+    resultados.sort((a, b) => a.diffDias - b.diffDias);
+    return resultados;
+  }, [data.personal]);
+
+  const DIAS_SEMANA = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+  const MESES_CORTO = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+
+  const cumpleLabel = (diff, fecha) => {
+    if (diff === 0) return { text: "HOY", emoji: "🎂", highlight: true };
+    if (diff === 1) return { text: "MAÑANA", emoji: "🎉", highlight: false };
+    return { text: `${fecha.getDate()} ${MESES_CORTO[fecha.getMonth()]}`, emoji: "🎈", highlight: false };
+  };
+
+  const cumpleHoy = cumples.filter(c => c.diffDias === 0);
+  const cumpleProximos = cumples.filter(c => c.diffDias > 0);
+
   return (
     <div>
       <PageHeader title="Panel de Control" sub="Resumen general — Dirección de Arbolado"/>
+
+      {/* ═══ AVISOS Y NOVEDADES ═══ */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-8 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
+          <span className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center text-sm">🔔</span>
+          <h3 className="font-bold text-gray-900 text-sm">Avisos y Novedades</h3>
+        </div>
+
+        {cumples.length === 0 ? (
+          <div className="px-5 py-8 text-center">
+            <p className="text-sm text-gray-400">No hay cumpleaños próximos en los próximos 7 días.</p>
+          </div>
+        ) : (
+          <div className="p-5">
+            {/* Cumpleaños HOY */}
+            {cumpleHoy.length > 0 && (
+              <div className="mb-5">
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200/60 p-4">
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">🎂 Hoy cumple{cumpleHoy.length > 1 ? "n" : ""} años</p>
+                  <div className="space-y-2.5">
+                    {cumpleHoy.map((p, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-sm font-bold shrink-0">
+                          {(p.nombre || "?")[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{p.nombre}</p>
+                          <p className="text-xs text-amber-700">{p.funcion || "Dirección de Arbolado"}</p>
+                        </div>
+                        <span className="ml-auto text-lg">🎉</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Próximos cumpleaños */}
+            {cumpleProximos.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">🎉 Próximos cumpleaños</p>
+                <div className="space-y-2">
+                  {cumpleProximos.map((p, i) => {
+                    const info = cumpleLabel(p.diffDias, p.cumpleFecha);
+                    const diaSemana = DIAS_SEMANA[p.cumpleFecha.getDay()];
+                    return (
+                      <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0">
+                          {(p.nombre || "?")[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900">{p.nombre}</p>
+                          <p className="text-xs text-gray-500">{p.funcion || "Dirección de Arbolado"}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className={`text-xs font-bold ${info.highlight ? "text-amber-700" : "text-emerald-700"}`}>{info.emoji} {info.text}</p>
+                          <p className="text-[10px] text-gray-400">{diaSemana}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ═══ STATS ═══ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         <StatCard label="Expedientes" value={data.expedientes.length} sub="Registrados" color="blue"/>
-        <StatCard label="Patrimonio Vegetal" value={data.patrimonioVegetal.length} sub="Expedientes" color="green"/>
+        <StatCard label="Patrimonio Vegetal" value={data.expedientes.filter(e=>esAsuntoPatrimonioVegetal(e.asunto)).length} sub="Expedientes vinculados" color="green"/>
         <StatCard label="Compras pend." value={pendC} sub={`${data.compras.length} totales`} color="yellow"/>
         <StatCard label="Saldo Caja Chica" value={fmtMoney(saldo)} sub={`Presup: ${fmtMoney(data.cajaChica.presupuesto)}`} color={saldo<0?"red":"green"}/>
         <StatCard label="Tareas activas" value={tActivas} sub={`${data.tareas.filter(t=>t.estado==="en_proceso").length} en proceso`} color="purple"/>
@@ -582,6 +695,7 @@ function Dashboard({ data, setPage }) {
         <StatCard label="Entregas" value={data.entregas.length} sub="Materiales entregados" color="orange"/>
       </div>
 
+      {/* ═══ ACTIVIDAD RECIENTE ═══ */}
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
           <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">

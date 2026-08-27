@@ -323,6 +323,44 @@ function SaveCancel({ onCancel, onSave }) {
 // ═══════════════════════════════
 // MAIN APP
 // ═══════════════════════════════
+// ─── Alerta de cumpleaños ───
+function BirthdayAlert({ personas, onClose }) {
+  if (!personas || personas.length === 0) return null;
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm"/>
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 px-6 pt-8 pb-6 text-center">
+          <div className="text-5xl mb-3">🎂</div>
+          <h2 className="text-xl font-bold text-gray-900 mb-1">{personas.length === 1 ? "¡Hoy hay un cumpleaños!" : `¡Hoy hay ${personas.length} cumpleaños!`}</h2>
+          <p className="text-sm text-gray-500">Dirección de Arbolado — {new Date().toLocaleDateString("es-AR",{day:"numeric",month:"long"})}</p>
+        </div>
+        <div className="px-6 py-5">
+          <div className="space-y-3">
+            {personas.map((p,i) => (
+              <div key={i} className="flex items-center gap-3 bg-amber-50/60 rounded-xl p-3.5">
+                <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-lg font-bold shrink-0">
+                  {(p.nombre||"?")[0].toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                  <p className="text-xs text-gray-500">{p.funcion || "Dirección de Arbolado"}</p>
+                </div>
+                <span className="ml-auto text-xl shrink-0">🎉</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="px-6 pb-6">
+          <button onClick={onClose} className="w-full px-4 py-3 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
+            Continuar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [data, setData] = useState(defaultState);
   const [loading, setLoading] = useState(true);
@@ -331,6 +369,8 @@ export default function App() {
   const [session, setSession] = useState(null); // { access_token, refresh_token, user }
   const [profile, setProfile] = useState(null); // { id, email, nombre, rol }
   const [authLoading, setAuthLoading] = useState(true);
+  const [birthdayPeople, setBirthdayPeople] = useState(null); // null = no revisado, [] = sin cumpleaños
+  const [showBirthday, setShowBirthday] = useState(false);
 
   // Al cargar la app: revisar si hay una sesión guardada y validarla
   useEffect(() => {
@@ -370,6 +410,24 @@ export default function App() {
   };
 
   useEffect(() => { if (session) loadData().then(d => { setData(d); setLoading(false); }); }, [session]);
+
+  // Detección de cumpleaños al cargar los datos por primera vez
+  useEffect(() => {
+    if (loading || birthdayPeople !== null) return; // solo revisar una vez
+    const hoyDate = new Date();
+    const diaHoy = hoyDate.getDate();
+    const mesHoy = hoyDate.getMonth() + 1;
+    const cumpleaneros = (data.personal || []).filter(p => {
+      if (!p.fechaNacimiento) return false;
+      const partes = p.fechaNacimiento.split("-");
+      if (partes.length < 3) return false;
+      const mes = parseInt(partes[1], 10);
+      const dia = parseInt(partes[2], 10);
+      return dia === diaHoy && mes === mesHoy;
+    });
+    setBirthdayPeople(cumpleaneros);
+    if (cumpleaneros.length > 0) setShowBirthday(true);
+  }, [loading, data.personal, birthdayPeople]);
   // Sincroniza con el equipo cada 12 segundos para ver cambios de otros usuarios
   useEffect(() => {
     if (!session) return;
@@ -420,6 +478,8 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+      {/* Alerta de cumpleaños */}
+      {showBirthday && <BirthdayAlert personas={birthdayPeople} onClose={()=>setShowBirthday(false)}/>}
       {sidebarOpen && <div className="fixed inset-0 bg-black/30 z-30 lg:hidden" onClick={()=>setSidebarOpen(false)}/>}
 
       {/* Sidebar */}

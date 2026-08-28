@@ -743,6 +743,31 @@ function Expedientes({ data, up }) {
   const empty = { numero:"", causante:"", asunto:"", fechaIngreso:hoy(), recibidoPor:"", area:"", domicilio:"", estado:"para_inspeccion", observaciones:"" };
   const [form, setForm] = useState(empty);
 
+  // Calcula el siguiente número de expediente correlativo
+  const siguienteNumero = useCallback(() => {
+    const todos = data.expedientes;
+    if (!todos || todos.length === 0) return "";
+    // Extraer solo la parte numérica de cada número (ignora puntos, barras, espacios)
+    const nums = todos.map(e => {
+      const limpio = (e.numero || "").replace(/[\s.,]/g, "");
+      const n = parseInt(limpio, 10);
+      return isNaN(n) ? 0 : n;
+    });
+    const maximo = Math.max(...nums);
+    if (maximo <= 0) return "";
+    // Detectar formato original: con punto cada 3 dígitos (ej: "45.000") o sin separador (ej: "45000")
+    const referencia = todos.find(e => {
+      const limpio = (e.numero || "").replace(/[\s,]/g, "");
+      return parseInt(limpio.replace(/\./g, ""), 10) === maximo;
+    });
+    const siguiente = maximo + 1;
+    if (referencia && referencia.numero.includes(".")) {
+      // Reproducir formato con punto: 45000 → "45.000"
+      return siguiente.toLocaleString("es-AR").replace(/,/g, ".");
+    }
+    return String(siguiente);
+  }, [data.expedientes]);
+
   const list = useMemo(() => {
     const q = search.toLowerCase();
     return [...data.expedientes].reverse().filter(e => e.numero.toLowerCase().includes(q)||e.causante.toLowerCase().includes(q)||e.asunto.toLowerCase().includes(q));
@@ -750,7 +775,7 @@ function Expedientes({ data, up }) {
 
   const esPV = esAsuntoPatrimonioVegetal(form.asunto);
 
-  const openNew = () => { setForm(empty); setEditing(null); setModal(true); };
+  const openNew = () => { setForm({...empty, numero: siguienteNumero()}); setEditing(null); setModal(true); };
   const openEdit = (e) => { setForm({estado:"para_inspeccion", domicilio:"", ...e}); setEditing(e.id); setModal(true); };
   const save = () => { if(!form.numero.trim()) return; const id = editing || uid(); up(p => editing ? {...p,expedientes:p.expedientes.map(e=>e.id===editing?{...form,id}:e)} : {...p,expedientes:[...p.expedientes,{...form,id}]}); (editing ? sbUpdate("expedientes", id, form) : sbInsert("expedientes", id, form)); setModal(false); };
   const remove = () => { up(p=>({...p,expedientes:p.expedientes.filter(e=>e.id!==del)})); sbDelete("expedientes", del); setDel(null); };
@@ -783,7 +808,13 @@ function Expedientes({ data, up }) {
       </div></div>
       <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar expediente":"Nuevo expediente"}>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="N° Expediente"><input className={inp} value={form.numero} onChange={e=>f("numero",e.target.value)} placeholder="Ej: 1234/2026"/></Field>
+          <Field label="N° Expediente">
+            <div className="relative">
+              <input className={inp} value={form.numero} onChange={e=>f("numero",e.target.value)} placeholder="Ej: 45001"/>
+              {!editing && form.numero && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">AUTO</span>}
+            </div>
+            {!editing && <p className="text-[11px] text-gray-400 mt-1">Calculado automáticamente. Podés editarlo si es necesario.</p>}
+          </Field>
           <Field label="Fecha de ingreso"><input type="date" className={inp} value={form.fechaIngreso} onChange={e=>f("fechaIngreso",e.target.value)}/></Field>
           <Field label="Causante" span2><input className={inp} value={form.causante} onChange={e=>f("causante",e.target.value)} placeholder="Nombre del causante"/></Field>
           <Field label="Asunto" span2>

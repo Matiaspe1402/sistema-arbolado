@@ -932,43 +932,179 @@ function CajaChicaPage({ data, up }) {
   const [anioS, setAnioS] = useState(h.getFullYear());
   const [modal, setModal] = useState(false);
   const [modalP, setModalP] = useState(false);
+  const [modalRendicion, setModalRendicion] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
   const [pInput, setPInput] = useState("");
-  const empty = { numeroFactura:"", proveedor:"", detalle:"", destino:"", cantidad:1, montoPorUnidad:"", montoTotal:"", fecha:hoy() };
-  const [form, setForm] = useState(empty);
 
-  const regs = useMemo(() => data.cajaChica.registros.filter(r=>r.mes===mesS&&r.anio===anioS), [data.cajaChica.registros, mesS, anioS]);
-  const totalG = regs.reduce((s,r)=>s+(parseFloat(r.montoTotal)||0),0);
-  const pres = parseFloat(data.cajaChica.presupuesto)||0;
+  // Una factura tiene: proveedor, N° factura, fecha, destino, y múltiples artículos
+  const emptyArticulo = { detalle:"", cantidad:1, importeUnitario:"" };
+  const emptyForm = { numeroFactura:"", proveedor:"", fecha:hoy(), destino:"", articulos:[{...emptyArticulo}] };
+  const [form, setForm] = useState(emptyForm);
+
+  // Registros del mes activo
+  const regs = useMemo(() =>
+    data.cajaChica.registros.filter(r => r.mes===mesS && r.anio===anioS),
+    [data.cajaChica.registros, mesS, anioS]
+  );
+
+  // Total gastado: suma de (cantidad × importeUnitario) de todos los artículos de todas las facturas
+  const totalG = useMemo(() => regs.reduce((sum, r) => {
+    const arts = r.articulos || [{ detalle:r.detalle, cantidad:r.cantidad||1, importeUnitario:r.montoPorUnidad||r.montoTotal||0 }];
+    return sum + arts.reduce((s, a) => s + (parseFloat(a.cantidad)||1) * (parseFloat(a.importeUnitario)||0), 0);
+  }, 0), [regs]);
+
+  const pres = parseFloat(data.cajaChica.presupuesto) || 0;
   const saldo = pres - totalG;
-  const pct = pres>0?Math.min((totalG/pres)*100,100):0;
+  const pct = pres > 0 ? Math.min((totalG / pres) * 100, 100) : 0;
 
-  const openNew = () => { setForm(empty); setEditing(null); setModal(true); };
-  const openEdit = (r) => { setForm({...r}); setEditing(r.id); setModal(true); };
+  // ─── Artículos del formulario ───
+  const setArticulo = (i, k, v) => setForm(p => {
+    const arts = p.articulos.map((a, idx) => idx===i ? {...a,[k]:v} : a);
+    return {...p, articulos:arts};
+  });
+  const addArticulo = () => setForm(p => ({...p, articulos:[...p.articulos, {...emptyArticulo}]}));
+  const removeArticulo = (i) => setForm(p => ({...p, articulos:p.articulos.filter((_,idx)=>idx!==i)}));
+
+  const openNew = () => { setForm(emptyForm); setEditing(null); setModal(true); };
+  const openEdit = (r) => {
+    const arts = r.articulos || [{ detalle:r.detalle||"", cantidad:r.cantidad||1, importeUnitario:r.montoPorUnidad||r.montoTotal||"" }];
+    setForm({ numeroFactura:r.numeroFactura||"", proveedor:r.proveedor||"", fecha:r.fecha||hoy(), destino:r.destino||"", articulos:arts });
+    setEditing(r.id);
+    setModal(true);
+  };
+
   const save = () => {
-    if(!form.numeroFactura.trim()) return;
-    const reg = {...form, mes:mesS, anio:anioS};
+    if (!form.numeroFactura.trim() || !form.proveedor.trim()) return;
+    const artsValidas = form.articulos.filter(a => a.detalle.trim());
+    if (artsValidas.length === 0) return;
+    const reg = { ...form, articulos:artsValidas, mes:mesS, anio:anioS };
     const id = editing || uid();
     up(p => {
       const rs = [...p.cajaChica.registros];
-      if(editing){ const i=rs.findIndex(r=>r.id===editing); if(i>=0)rs[i]={...reg,id}; }
-      else rs.push({...reg,id});
+      if (editing) { const i = rs.findIndex(r=>r.id===editing); if(i>=0) rs[i]={...reg,id}; }
+      else rs.push({...reg, id});
       return {...p, cajaChica:{...p.cajaChica, registros:rs}};
     });
     (editing ? sbUpdate("caja_chica_registros", id, reg) : sbInsert("caja_chica_registros", id, reg));
     setModal(false);
   };
+
   const remove = () => { up(p=>({...p,cajaChica:{...p.cajaChica,registros:p.cajaChica.registros.filter(r=>r.id!==del)}})); sbDelete("caja_chica_registros", del); setDel(null); };
   const saveP = () => { const v = parseFloat(pInput)||0; up(p=>({...p,cajaChica:{...p.cajaChica,presupuesto:v}})); sbSetPresupuesto(v); setModalP(false); };
-  const f = (k,v) => { setForm(p => { const n={...p,[k]:v}; if(k==="montoPorUnidad"||k==="cantidad"){ const c=k==="cantidad"?parseFloat(v)||0:parseFloat(n.cantidad)||0; const u=k==="montoPorUnidad"?parseFloat(v)||0:parseFloat(n.montoPorUnidad)||0; n.montoTotal=(c*u).toFixed(2); } return n; }); };
+
+  // ─── Generar e imprimir la rendición ───
+  const imprimirRendicion = () => {
+    const filas = [];
+    regs.forEach(r => {
+      const arts = r.articulos || [{ detalle:r.detalle, cantidad:r.cantidad||1, importeUnitario:r.montoPorUnidad||r.montoTotal||0 }];
+      arts.forEach((a, i) => {
+        filas.push({
+          proveedor: i===0 ? (r.proveedor||"") : "",
+          factura: i===0 ? (r.numeroFactura||"") : "",
+          detalle: a.detalle || "",
+          destino: i===0 ? (r.destino||"") : "",
+          cantidad: parseFloat(a.cantidad)||1,
+          importeUnitario: parseFloat(a.importeUnitario)||0,
+        });
+      });
+    });
+    const totalRendicion = filas.reduce((s,f) => s + f.cantidad * f.importeUnitario, 0);
+    const fmtARS = (n) => "$" + n.toLocaleString("es-AR", {minimumFractionDigits:2, maximumFractionDigits:2});
+    const filasHTML = filas.map(f => `
+      <tr>
+        <td>${f.proveedor}</td>
+        <td style="text-align:center">${f.factura}</td>
+        <td>${f.detalle}${f.cantidad > 1 ? ` <span style="color:#888;font-size:11px">(x${f.cantidad})</span>` : ""}</td>
+        <td>${f.destino}</td>
+        <td style="text-align:right">${f.importeUnitario > 0 ? fmtARS(f.importeUnitario) : ""}</td>
+      </tr>`).join("");
+
+    const w = window.open("","_blank","width=900,height=700");
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><title>Rendición Caja Chica — ${MESES[mesS]} ${anioS}</title>
+<style>
+@media print { .no-print { display:none !important; } @page { size:A4; margin:2cm; } }
+body { font-family:'Times New Roman',Times,serif; font-size:12pt; color:#111; margin:0; }
+.page { max-width:780px; margin:0 auto; padding:20px; }
+.header { text-align:center; margin-bottom:24px; border-bottom:2px solid #222; padding-bottom:14px; }
+.header h1 { font-size:14pt; font-weight:bold; margin:0 0 4px; text-transform:uppercase; letter-spacing:1px; }
+.header p { font-size:10pt; color:#444; margin:2px 0; }
+.titulo-tabla { font-size:12pt; font-weight:bold; text-align:center; margin:16px 0 10px; text-transform:uppercase; letter-spacing:1px; }
+table { width:100%; border-collapse:collapse; font-size:10.5pt; }
+thead tr { background:#f0f0f0; }
+th { border:1px solid #999; padding:6px 8px; font-weight:bold; font-size:10pt; text-align:left; text-transform:uppercase; }
+td { border:1px solid #bbb; padding:5px 8px; vertical-align:top; }
+tr:nth-child(even) td { background:#fafafa; }
+.totales { margin-top:16px; border-top:2px solid #222; }
+.totales table { width:100%; border-collapse:collapse; }
+.totales td { padding:5px 8px; border:none; font-size:11pt; }
+.totales .label { font-weight:bold; text-align:right; width:60%; }
+.totales .valor { text-align:right; min-width:140px; }
+.saldo-pos { color:#15803d; font-weight:bold; }
+.saldo-neg { color:#dc2626; font-weight:bold; }
+.btn-bar { display:flex; gap:10px; justify-content:center; margin:16px 0; }
+.btn { padding:10px 28px; border:none; border-radius:8px; font-size:13px; cursor:pointer; font-weight:600; }
+.btn-print { background:#16a34a; color:white; }
+.btn-word { background:#1d4ed8; color:white; }
+</style></head><body>
+<div class="page">
+<div class="btn-bar no-print">
+  <button class="btn btn-print" onclick="window.print()">Imprimir</button>
+  <button class="btn btn-word" onclick="descargarWord()">Descargar Word</button>
+</div>
+<div class="header">
+  <h1>Municipalidad de San Miguel de Tucumán</h1>
+  <p>Dirección de Arbolado</p>
+  <p style="font-size:11pt;font-weight:bold;margin-top:6px;">RENDICIÓN DE CAJA CHICA — ${MESES[mesS].toUpperCase()} ${anioS}</p>
+</div>
+<div class="titulo-tabla">Cuadro de Rendición Mensual</div>
+<table>
+  <thead><tr>
+    <th style="width:22%">Proveedor</th>
+    <th style="width:12%;text-align:center">N° Factura</th>
+    <th style="width:30%">Detalle</th>
+    <th style="width:20%">Destino</th>
+    <th style="width:16%;text-align:right">Importe Unitario</th>
+  </tr></thead>
+  <tbody>${filasHTML}</tbody>
+</table>
+<div class="totales">
+  <table>
+    <tr><td class="label">IMPORTE ASIGNADO:</td><td class="valor">${fmtARS(pres)}</td></tr>
+    <tr><td class="label">IMPORTE TOTAL GASTADO:</td><td class="valor">${fmtARS(totalRendicion)}</td></tr>
+    <tr><td class="label">SALDO:</td><td class="valor ${totalRendicion<=pres?"saldo-pos":"saldo-neg"}">${fmtARS(pres - totalRendicion)}</td></tr>
+  </table>
+</div>
+<div style="margin-top:60px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center">
+  <div><div style="border-top:1px solid #333;padding-top:6px;font-size:10pt">Firma responsable</div></div>
+  <div><div style="border-top:1px solid #333;padding-top:6px;font-size:10pt">Autorización</div></div>
+</div>
+</div>
+<script>
+function descargarWord(){
+  const html=document.querySelector('.page').innerHTML;
+  const full='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><style>body{font-family:Times New Roman;font-size:12pt;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #999;padding:5px 8px;}</style></head><body>'+html+'</body></html>';
+  const blob=new Blob(['\ufeff'+full],{type:'application/msword'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='Rendicion_CajaChica_${MESES[mesS]}_${anioS}.doc';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+</script>
+</body></html>`);
+    w.document.close();
+  };
 
   return (
     <div>
       <PageHeader title="Caja Chica" sub="Rendición mensual de gastos">
-        <button onClick={()=>{setPInput(data.cajaChica.presupuesto.toString());setModalP(true);}} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50">Presupuesto</button>
-        <BtnNew onClick={openNew} label="Nuevo gasto"/>
+        <button onClick={()=>{setPInput(data.cajaChica.presupuesto.toString());setModalP(true);}} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Presupuesto</button>
+        <button onClick={imprimirRendicion} disabled={regs.length===0} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">{I.print} Generar rendición</button>
+        <BtnNew onClick={openNew} label="Nueva factura"/>
       </PageHeader>
+
+      {/* Período + resumen */}
       <div className="grid sm:grid-cols-3 gap-3 mb-6">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Período</p>
@@ -988,42 +1124,91 @@ function CajaChicaPage({ data, up }) {
           <p className="text-xs text-gray-400 mt-1">de {fmtMoney(pres)}</p>
         </div>
       </div>
+
+      {/* Tabla de facturas del mes */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
-          <TH>Factura</TH><TH>Proveedor</TH><TH className="hidden sm:table-cell">Detalle</TH><TH className="hidden md:table-cell">Destino</TH><TH className="hidden lg:table-cell">Fecha</TH><TH className="text-right">Total</TH><TH className="text-right">Acciones</TH>
+          <TH>N° Factura</TH><TH>Proveedor</TH><TH>Artículos</TH><TH className="hidden md:table-cell">Destino</TH><TH className="hidden lg:table-cell">Fecha</TH><TH className="text-right">Total factura</TH><TH className="text-right">Acciones</TH>
         </tr></thead><tbody className="divide-y divide-gray-50">
-          {regs.length===0 ? <EmptyRow cols={7} text={`Sin gastos para ${MESES[mesS]} ${anioS}`}/> : regs.map(r => (
-            <tr key={r.id} className="hover:bg-gray-50/50">
-              <td className="px-4 py-3 font-medium text-gray-900">{r.numeroFactura}</td>
-              <td className="px-4 py-3 text-gray-700">{r.proveedor}</td>
-              <td className="px-4 py-3 text-gray-600 hidden sm:table-cell max-w-[160px] truncate">{r.detalle}</td>
-              <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{r.destino}</td>
-              <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{fmtDate(r.fecha)}</td>
-              <td className="px-4 py-3 text-right font-medium text-gray-900">{fmtMoney(r.montoTotal)}</td>
-              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(r)} onDelete={()=>setDel(r.id)}/></td>
-            </tr>
-          ))}
+          {regs.length===0 ? <EmptyRow cols={7} text={`Sin gastos para ${MESES[mesS]} ${anioS}`}/> : regs.map(r => {
+            const arts = r.articulos || [{ detalle:r.detalle, cantidad:r.cantidad||1, importeUnitario:r.montoPorUnidad||r.montoTotal||0 }];
+            const totalFact = arts.reduce((s,a)=>s+(parseFloat(a.cantidad)||1)*(parseFloat(a.importeUnitario)||0),0);
+            return (
+              <tr key={r.id} className="hover:bg-gray-50/50 align-top">
+                <td className="px-4 py-3 font-medium text-gray-900">{r.numeroFactura}</td>
+                <td className="px-4 py-3 text-gray-700">{r.proveedor}</td>
+                <td className="px-4 py-2">
+                  {arts.map((a,i)=>(
+                    <div key={i} className="py-1 text-gray-700 text-xs flex items-start gap-1.5">
+                      <span className="shrink-0 text-gray-400">·</span>
+                      <span>{a.detalle}{parseFloat(a.cantidad)>1?<span className="text-gray-400 ml-1">×{a.cantidad}</span>:null} — <span className="text-gray-500">{fmtMoney(a.importeUnitario)}</span></span>
+                    </div>
+                  ))}
+                </td>
+                <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{r.destino}</td>
+                <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{fmtDate(r.fecha)}</td>
+                <td className="px-4 py-3 text-right font-semibold text-gray-900">{fmtMoney(totalFact)}</td>
+                <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(r)} onDelete={()=>setDel(r.id)}/></td>
+              </tr>
+            );
+          })}
         </tbody></table>
       </div></div>
-      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar gasto":"Nuevo gasto"}>
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="N° Factura"><input className={inp} value={form.numeroFactura} onChange={e=>f("numeroFactura",e.target.value)}/></Field>
-          <Field label="Fecha"><input type="date" className={inp} value={form.fecha} onChange={e=>f("fecha",e.target.value)}/></Field>
-          <Field label="Proveedor" span2><input className={inp} value={form.proveedor} onChange={e=>f("proveedor",e.target.value)}/></Field>
-          <Field label="Detalle" span2><input className={inp} value={form.detalle} onChange={e=>f("detalle",e.target.value)} placeholder="Qué se compró"/></Field>
-          <Field label="Destino" span2><input className={inp} value={form.destino} onChange={e=>f("destino",e.target.value)} placeholder="Para qué área o uso"/></Field>
-          <Field label="Cantidad"><input type="number" min="1" className={inp} value={form.cantidad} onChange={e=>f("cantidad",e.target.value)}/></Field>
-          <Field label="Monto por unidad"><input type="number" step="0.01" className={inp} value={form.montoPorUnidad} onChange={e=>f("montoPorUnidad",e.target.value)} placeholder="0.00"/></Field>
-          <Field label="Monto total" span2><input type="number" step="0.01" className={inp+" bg-gray-100 font-semibold"} value={form.montoTotal} onChange={e=>f("montoTotal",e.target.value)}/><p className="text-[11px] text-gray-400 mt-1">Cantidad × Monto unitario. Editable manualmente.</p></Field>
+
+      {/* Modal: Nueva factura con múltiples artículos */}
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar factura":"Nueva factura"} wide>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <Field label="N° Factura"><input className={inp} value={form.numeroFactura} onChange={e=>setForm(p=>({...p,numeroFactura:e.target.value}))} placeholder="N° factura"/></Field>
+          <Field label="Fecha"><input type="date" className={inp} value={form.fecha} onChange={e=>setForm(p=>({...p,fecha:e.target.value}))}/></Field>
+          <Field label="Proveedor" span2><input className={inp} value={form.proveedor} onChange={e=>setForm(p=>({...p,proveedor:e.target.value}))} placeholder="Nombre del proveedor"/></Field>
+          <Field label="Destino" span2><input className={inp} value={form.destino} onChange={e=>setForm(p=>({...p,destino:e.target.value}))} placeholder="Para qué área o uso (aplica a todos los artículos)"/></Field>
+        </div>
+
+        {/* Artículos de la factura */}
+        <div className="border border-gray-200 rounded-xl overflow-hidden mb-4">
+          <div className="bg-gray-50 px-4 py-2.5 flex items-center justify-between border-b border-gray-200">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Artículos de la factura</p>
+            <button onClick={addArticulo} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">{I.plus} Agregar artículo</button>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {form.articulos.map((a, i) => (
+              <div key={i} className="px-4 py-3 grid grid-cols-12 gap-2 items-end">
+                <div className="col-span-5">
+                  <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Detalle</label>
+                  <input className={inp} value={a.detalle} onChange={e=>setArticulo(i,"detalle",e.target.value)} placeholder="Qué es el artículo"/>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Cantidad</label>
+                  <input type="number" min="1" className={inp} value={a.cantidad} onChange={e=>setArticulo(i,"cantidad",e.target.value)}/>
+                </div>
+                <div className="col-span-3">
+                  <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Importe unit.</label>
+                  <input type="number" step="0.01" className={inp} value={a.importeUnitario} onChange={e=>setArticulo(i,"importeUnitario",e.target.value)} placeholder="0.00"/>
+                </div>
+                <div className="col-span-1 text-right text-xs font-semibold text-gray-700 pb-2.5">
+                  {parseFloat(a.cantidad)>0&&parseFloat(a.importeUnitario)>0 ? fmtMoney((parseFloat(a.cantidad)||0)*(parseFloat(a.importeUnitario)||0)) : ""}
+                </div>
+                <div className="col-span-1 flex justify-end pb-1">
+                  {form.articulos.length > 1 && <button onClick={()=>removeArticulo(i)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-300 hover:text-rose-400 transition-colors">{I.trash}</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="bg-gray-50 px-4 py-2.5 border-t border-gray-200 flex justify-end">
+            <span className="text-xs font-bold text-gray-600">
+              TOTAL FACTURA: {fmtMoney(form.articulos.reduce((s,a)=>(parseFloat(a.cantidad)||0)*(parseFloat(a.importeUnitario)||0)+s,0))}
+            </span>
+          </div>
         </div>
         <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
       </Modal>
+
       <Modal open={modalP} onClose={()=>setModalP(false)} title="Presupuesto mensual">
         <Field label="Monto del presupuesto"><input type="number" step="0.01" className={inp} value={pInput} onChange={e=>setPInput(e.target.value)} placeholder="0.00"/></Field>
         <p className="text-xs text-gray-400 mt-2">Se aplica a todos los meses.</p>
         <SaveCancel onCancel={()=>setModalP(false)} onSave={saveP}/>
       </Modal>
-      <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este gasto"/>
+      <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="esta factura"/>
     </div>
   );
 }

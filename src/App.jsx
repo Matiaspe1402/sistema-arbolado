@@ -1321,12 +1321,115 @@ function TareasPage({ data, up }) {
 // ═══════════════════════════════
 // DESCANSOS COMPENSATORIOS
 // ═══════════════════════════════
+// ─── Helpers de documento compartidos ───
+const MST_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 100 100"><circle cx="50" cy="50" r="48" fill="none" stroke="#2563eb" stroke-width="3"/><text x="50" y="38" text-anchor="middle" font-size="10" font-weight="bold" fill="#1e3a8a" font-family="Arial">MUNICIPIO</text><text x="50" y="52" text-anchor="middle" font-size="9" font-weight="bold" fill="#1e3a8a" font-family="Arial">San Miguel</text><text x="50" y="64" text-anchor="middle" font-size="9" font-weight="bold" fill="#1e3a8a" font-family="Arial">de Tucumán</text></svg>`;
+
+const membrete = () => `
+<div class="membrete">
+  <div class="membrete-logo">
+    <div class="escudo">${MST_LOGO_SVG}</div>
+    <div class="membrete-texto">
+      <div class="muni-nombre">MUNICIPIO<br/><strong>San Miguel<br/>de Tucumán</strong></div>
+      <div class="membrete-sep"></div>
+      <div class="dir-nombre">Dirección de<br/><strong>Arbolado</strong></div>
+    </div>
+  </div>
+</div>`;
+
+const estiloBase = () => `
+<style>
+@media print { .no-print { display:none !important; } @page { size:A4; margin:2.2cm 2.5cm 3cm 2.5cm; } }
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family:'Times New Roman',Times,serif; font-size:11.5pt; color:#111; }
+.page { max-width:720px; margin:0 auto; padding:24px; }
+.membrete { display:flex; align-items:center; margin-bottom:28px; padding-bottom:14px; border-bottom:2px solid #1e3a8a; }
+.membrete-logo { display:flex; align-items:center; gap:14px; }
+.escudo { width:70px; }
+.escudo svg { width:70px; height:70px; }
+.membrete-texto { display:flex; align-items:center; gap:14px; }
+.muni-nombre { font-size:10.5pt; font-family:Arial,sans-serif; line-height:1.3; color:#1e3a8a; }
+.membrete-sep { width:1px; height:44px; background:#1e3a8a; opacity:0.4; }
+.dir-nombre { font-size:10pt; font-family:Arial,sans-serif; line-height:1.4; color:#1e3a8a; }
+.lugar-fecha { text-align:right; margin-bottom:28px; font-size:11pt; }
+.destinatario { margin-bottom:22px; font-size:11pt; line-height:1.7; }
+.destinatario .cargo { font-weight:normal; }
+.destinatario .nombre { font-weight:normal; }
+.destinatario .despacho { font-weight:bold; text-decoration:underline; }
+.cuerpo { text-align:justify; line-height:1.8; font-size:11.5pt; margin-bottom:28px; text-indent:3em; }
+.cierre { margin-top:18px; font-size:11pt; }
+.firmas { margin-top:70px; display:grid; grid-template-columns:1fr 1fr; gap:40px; text-align:center; }
+.firma-linea { border-top:1px solid #333; padding-top:8px; font-size:10pt; }
+.btn-bar { display:flex; gap:10px; justify-content:center; margin:18px 0; }
+.btn { padding:10px 28px; border:none; border-radius:8px; font-size:13px; cursor:pointer; font-weight:600; }
+.btn-print { background:#16a34a; color:white; }
+.btn-word { background:#1d4ed8; color:white; }
+/* Estilos extra para Resolución */
+.resolucion-titulo { text-align:center; font-size:13pt; font-weight:bold; margin:20px 0 8px; text-transform:uppercase; letter-spacing:1px; }
+.resolucion-numero { text-align:center; font-size:11.5pt; margin-bottom:20px; }
+.seccion { font-weight:bold; font-size:11.5pt; margin:16px 0 6px; text-transform:uppercase; text-align:center; }
+.cuerpo-resolucion { text-align:justify; line-height:1.8; font-size:11.5pt; margin-bottom:12px; }
+.articulo { margin-bottom:14px; text-align:justify; line-height:1.8; font-size:11.5pt; }
+.articulo strong { font-weight:bold; }
+table.agentes { width:100%; border-collapse:collapse; margin:14px 0; font-size:10.5pt; }
+table.agentes th, table.agentes td { border:1px solid #888; padding:5px 10px; }
+table.agentes th { background:#f0f0f0; font-weight:bold; text-align:left; text-transform:uppercase; font-size:10pt; }
+</style>`;
+
+const fnDescargarWord = (nombreArchivo) => `
+function descargarWord(){
+  const c=document.querySelector('.page').innerHTML;
+  const full='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8">${estiloBase().replace(/<\/?style>/g,'').replace(/\n/g,' ')}</head><body><div class="page">'+c+'</div></body></html>';
+  const blob=new Blob(['\ufeff'+full],{type:'application/msword'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download='${nombreArchivo}.doc';document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}`;
+
+const abrirVentanaDoc = (titulo, htmlBody, nombreArchivo) => {
+  const w = window.open("","_blank","width=860,height=720");
+  if (!w) return;
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo}</title>${estiloBase()}</head><body>
+<div class="btn-bar no-print">
+  <button class="btn btn-print" onclick="window.print()">Imprimir</button>
+  <button class="btn btn-word" onclick="descargarWord()">Descargar Word</button>
+</div>
+<div class="page">${htmlBody}</div>
+<script>${fnDescargarWord(nombreArchivo)}<\/script>
+</body></html>`);
+  w.document.close();
+};
+
+const fmtFechaLarga = (iso) => {
+  if (!iso) return "";
+  const [y,m,d] = iso.split("-");
+  const meses = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  return `${parseInt(d,10)} de ${meses[parseInt(m,10)-1]} de ${y}`;
+};
+const fmtDiaSemana = (iso) => {
+  if (!iso) return "";
+  const dias = ["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  const [y,m,d] = iso.split("-").map(Number);
+  return dias[new Date(y, m-1, d).getDay()];
+};
+const numLetras = (n) => {
+  const letras = ["cero","un","dos","tres","cuatro","cinco","seis","siete","ocho","nueve","diez"];
+  const ni = parseInt(n, 10);
+  return letras[ni] !== undefined ? letras[ni] : String(n);
+};
+const numLetrasConParentesis = (n) => {
+  const ni = parseInt(n, 10);
+  return `${String(ni).padStart(2,"0")} (${numLetras(n)})`;
+};
+
+// ═══════════════════════════════
+// DESCANSOS COMPENSATORIOS
+// ═══════════════════════════════
 function DescansosPage({ data, up }) {
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
-  const empty = { agente:"", afiliado:"", fecha:"", observaciones:"" };
+  // Soporte multi-fecha: fechas es un array de strings ISO
+  const empty = { agente:"", afiliado:"", fechas:[""], numeroResolucion:"", observaciones:"" };
   const [form, setForm] = useState(empty);
 
   const list = useMemo(() => {
@@ -1334,39 +1437,129 @@ function DescansosPage({ data, up }) {
     return [...data.descansos].reverse().filter(d => d.agente.toLowerCase().includes(q)||d.afiliado.toLowerCase().includes(q));
   }, [data.descansos, search]);
 
-  const openNew = () => { setForm({...empty,fecha:hoy()}); setEditing(null); setModal(true); };
-  const openEdit = (d) => { setForm({...d}); setEditing(d.id); setModal(true); };
-  const save = () => { if(!form.agente.trim()) return; const id = editing || uid(); up(p=> editing ? {...p,descansos:p.descansos.map(d=>d.id===editing?{...form,id}:d)} : {...p,descansos:[...p.descansos,{...form,id}]}); (editing ? sbUpdate("descansos", id, form) : sbInsert("descansos", id, form)); setModal(false); };
+  const openNew = () => { setForm({...empty,fechas:[hoy()]}); setEditing(null); setModal(true); };
+  const openEdit = (d) => {
+    // Compatibilidad con registros viejos (campo "fecha" singular)
+    const fechas = d.fechas || (d.fecha ? [d.fecha] : [hoy()]);
+    setForm({...d, fechas});
+    setEditing(d.id);
+    setModal(true);
+  };
+  const save = () => {
+    if (!form.agente.trim()) return;
+    const id = editing || uid();
+    const reg = {...form, fechas: form.fechas.filter(f=>f)};
+    up(p => editing ? {...p,descansos:p.descansos.map(d=>d.id===editing?{...reg,id}:d)} : {...p,descansos:[...p.descansos,{...reg,id}]});
+    (editing ? sbUpdate("descansos", id, reg) : sbInsert("descansos", id, reg));
+    setModal(false);
+  };
   const remove = () => { up(p=>({...p,descansos:p.descansos.filter(d=>d.id!==del)})); sbDelete("descansos", del); setDel(null); };
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
+  const setFecha = (i, v) => setForm(p => { const fs=[...p.fechas]; fs[i]=v; return {...p,fechas:fs}; });
+  const addFecha = () => setForm(p=>({...p,fechas:[...p.fechas,""]}));
+  const removeFecha = (i) => setForm(p=>({...p,fechas:p.fechas.filter((_,idx)=>idx!==i)}));
+
+  // Generar documento Resolución de Descanso
+  const generarResolucion = (d) => {
+    const fechas = d.fechas || (d.fecha ? [d.fecha] : []);
+    const fechasValidas = fechas.filter(f=>f);
+    const cantDias = fechasValidas.length;
+    const listFechas = fechasValidas.map(f=>`${fmtDiaSemana(f)} ${fmtFechaLarga(f)}`).join(", ");
+    const numRes = d.numeroResolucion || "____";
+    const fechaDoc = fmtFechaLarga(hoy());
+
+    const html = `
+${membrete()}
+<p class="lugar-fecha">San Miguel de Tucumán, ${fechaDoc}</p>
+<p class="resolucion-titulo">Resolución Nº ${numRes}</p>
+
+<p class="seccion">Visto:</p>
+<p class="cuerpo-resolucion">La necesidad de contar con personal que cumpla tareas específicas, relacionadas a trabajos operativos en la Dirección de Arbolado; y</p>
+
+<p class="seccion">Considerando:</p>
+<p class="cuerpo-resolucion">Que atento a lo precedentemente expuesto resulta necesario emitir el pertinente acto administrativo, disponiendo los descansos compensatorios, para los agentes que prestan servicios en la Dirección de Arbolado, que trabajaron en la Dirección de Arbolado fuera de su horario habitual.</p>
+
+<p class="seccion">Por ello,</p>
+<p class="seccion" style="font-size:12pt">El Director de Arbolado</p>
+<p class="seccion">Resuelve</p>
+
+<p class="articulo"><strong>Artículo 1°.-</strong> Disponer los días de descansos compensatorios correspondientes por trabajar en exceso de horas, para el personal que prestó servicios en la Dirección de Arbolado, realizando trabajos operativos fuera de su horario habitual, a fin de que por su desempeño en tareas operativas se le otorguen los descansos compensatorios correspondientes a los agentes que se detallan a continuación:</p>
+
+<p style="font-weight:bold;text-align:center;margin:14px 0 8px;font-size:10.5pt;text-transform:uppercase;letter-spacing:0.5px">Listado de Agentes</p>
+<table class="agentes">
+  <thead><tr><th>N°</th><th>Afiliado</th><th>Apellido y Nombre</th><th>Días</th><th>Compensatorio Fecha</th></tr></thead>
+  <tbody><tr><td style="text-align:center">01</td><td>${d.afiliado||""}</td><td>${d.agente}</td><td style="text-align:center">${cantDias}</td><td>${listFechas}</td></tr></tbody>
+</table>
+
+<p class="articulo"><strong>Artículo 2°.-</strong> Notificar al agente y al encargado de personal para su conocimiento y archivo.</p>
+
+<p class="articulo"><strong>Artículo 3°.-</strong> Regístrese, comuníquese y archívese.-</p>
+
+<div class="firmas">
+  <div><div class="firma-linea">Firma y aclaración</div></div>
+  <div><div class="firma-linea">Director de Arbolado</div></div>
+</div>`;
+    abrirVentanaDoc(`Resolución Descanso — ${d.agente}`, html, `Resolucion_Descanso_${(d.agente||"").replace(/ /g,"_")}`);
+  };
+
+  const printIcon = I.print;
 
   return (
     <div>
-      <PageHeader title="Descansos Compensatorios" sub="Registro de días de descanso compensatorio"><BtnNew onClick={openNew} label="Nuevo registro"/></PageHeader>
+      <PageHeader title="Descansos Compensatorios" sub="Registro y generación de resoluciones de descanso"><BtnNew onClick={openNew} label="Nuevo registro"/></PageHeader>
       <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por agente o N° afiliado..."/></div>
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
-          <TH>Agente</TH><TH>N° Afiliado</TH><TH>Fecha descanso</TH><TH className="hidden sm:table-cell">Observaciones</TH><TH className="text-right">Acciones</TH>
+          <TH>Agente</TH><TH>N° Afiliado</TH><TH>Fecha(s) descanso</TH><TH className="hidden sm:table-cell">N° Resolución</TH><TH className="text-right">Acciones</TH>
         </tr></thead><tbody className="divide-y divide-gray-50">
-          {list.length===0 ? <EmptyRow cols={5} text={search?"Sin resultados":"Sin descansos registrados"}/> : list.map(d => (
-            <tr key={d.id} className="hover:bg-gray-50/50">
-              <td className="px-4 py-3 font-medium text-gray-900">{d.agente}</td>
-              <td className="px-4 py-3 text-gray-700">{d.afiliado}</td>
-              <td className="px-4 py-3 text-gray-700">{fmtDate(d.fecha)}</td>
-              <td className="px-4 py-3 text-gray-500 hidden sm:table-cell max-w-[200px] truncate">{d.observaciones||"—"}</td>
-              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(d)} onDelete={()=>setDel(d.id)}/></td>
-            </tr>
-          ))}
+          {list.length===0 ? <EmptyRow cols={5} text={search?"Sin resultados":"Sin descansos registrados"}/> : list.map(d => {
+            const fechas = d.fechas || (d.fecha ? [d.fecha] : []);
+            return (
+              <tr key={d.id} className="hover:bg-gray-50/50">
+                <td className="px-4 py-3 font-medium text-gray-900">{d.agente}</td>
+                <td className="px-4 py-3 text-gray-700">{d.afiliado}</td>
+                <td className="px-4 py-3 text-gray-700 text-xs">{fechas.map(f=>fmtDate(f)).join(", ")||"—"}</td>
+                <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{d.numeroResolucion||"—"}</td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-0.5">
+                    <button onClick={()=>generarResolucion(d)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar resolución">{printIcon}</button>
+                    <button onClick={()=>openEdit(d)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
+                    <button onClick={()=>setDel(d.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
         </tbody></table>
       </div></div>
-      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar descanso":"Nuevo descanso compensatorio"}>
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar descanso":"Nuevo descanso compensatorio"} wide>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nombre del agente" span2><input className={inp} value={form.agente} onChange={e=>f("agente",e.target.value)} placeholder="Nombre completo"/></Field>
           <Field label="N° de afiliado"><input className={inp} value={form.afiliado} onChange={e=>f("afiliado",e.target.value)} placeholder="N° afiliado"/></Field>
-          <Field label="Fecha del descanso"><input type="date" className={inp} value={form.fecha} onChange={e=>f("fecha",e.target.value)}/></Field>
-          <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Motivo, autorización, etc."/></Field>
+          <Field label="N° de Resolución"><input className={inp} value={form.numeroResolucion||""} onChange={e=>f("numeroResolucion",e.target.value)} placeholder="Ej: 3560/SSP/25"/></Field>
+          <div className="col-span-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fecha(s) del descanso</span>
+              <button onClick={addFecha} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">{I.plus} Agregar fecha</button>
+            </div>
+            <div className="space-y-2">
+              {form.fechas.map((f2, i) => (
+                <div key={i} className="flex gap-2 items-center">
+                  <input type="date" className={inp+" flex-1"} value={f2} onChange={e=>setFecha(i,e.target.value)}/>
+                  {form.fechas.length > 1 && <button onClick={()=>removeFecha(i)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-300 hover:text-rose-400">{I.trash}</button>}
+                </div>
+              ))}
+            </div>
+          </div>
+          <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Motivo, notas..."/></Field>
         </div>
-        <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
+        <div className="flex justify-between mt-6">
+          <button onClick={()=>{ if(form.agente.trim()) generarResolucion(form); }} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">{printIcon} Vista previa</button>
+          <div className="flex gap-3">
+            <button onClick={()=>setModal(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
+            <button onClick={save} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Guardar</button>
+          </div>
+        </div>
       </Modal>
       <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este registro"/>
     </div>
@@ -1381,7 +1574,7 @@ function LicenciasPage({ data, up }) {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
-  const empty = { agente:"", afiliado:"", fechaDesde:"", fechaHasta:"", diasTotales:"", tipoLicencia:"vacaciones", observaciones:"" };
+  const empty = { agente:"", afiliado:"", fechaDesde:"", fechaHasta:"", diasTotales:"", tipoLicencia:"vacaciones", resolucion:"", diasRestantes:"", observaciones:"" };
   const [form, setForm] = useState(empty);
 
   const list = useMemo(() => {
@@ -1392,14 +1585,57 @@ function LicenciasPage({ data, up }) {
   const tipos = { vacaciones:"Vacaciones", enfermedad:"Enfermedad", familiar:"Asuntos familiares", otro:"Otro" };
 
   const openNew = () => { setForm({...empty,fechaDesde:hoy()}); setEditing(null); setModal(true); };
-  const openEdit = (l) => { setForm({...l}); setEditing(l.id); setModal(true); };
-  const save = () => { if(!form.agente.trim()) return; const id = editing || uid(); up(p=> editing ? {...p,licencias:p.licencias.map(l=>l.id===editing?{...form,id}:l)} : {...p,licencias:[...p.licencias,{...form,id}]}); (editing ? sbUpdate("licencias", id, form) : sbInsert("licencias", id, form)); setModal(false); };
+  const openEdit = (l) => { setForm({resolucion:"", diasRestantes:"", ...l}); setEditing(l.id); setModal(true); };
+  const save = () => {
+    if (!form.agente.trim()) return;
+    const id = editing || uid();
+    up(p => editing ? {...p,licencias:p.licencias.map(l=>l.id===editing?{...form,id}:l)} : {...p,licencias:[...p.licencias,{...form,id}]});
+    (editing ? sbUpdate("licencias", id, form) : sbInsert("licencias", id, form));
+    setModal(false);
+  };
   const remove = () => { up(p=>({...p,licencias:p.licencias.filter(l=>l.id!==del)})); sbDelete("licencias", del); setDel(null); };
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
+  // Generar Nota de Licencia (modelo Imagen 1)
+  const generarNota = (l) => {
+    const fechaDoc = fmtFechaLarga(hoy());
+    const desde = fmtFechaLarga(l.fechaDesde);
+    const hasta = fmtFechaLarga(l.fechaHasta);
+    const cant = parseInt(l.diasTotales, 10) || 0;
+    const cantStr = numLetrasConParentesis(cant);
+    const resol = l.resolucion || "____";
+    const diasRest = l.diasRestantes || "____";
+    const tipo = tipos[l.tipoLicencia] || l.tipoLicencia;
+
+    // Construir descripción de fechas
+    let descFechas = "";
+    if (l.fechaDesde && l.fechaHasta && l.fechaDesde !== l.fechaHasta) {
+      descFechas = `los días ${fmtDiaSemana(l.fechaDesde)} ${fmtFechaLarga(l.fechaDesde)} y ${fmtDiaSemana(l.fechaHasta)} ${fmtFechaLarga(l.fechaHasta)}`;
+    } else if (l.fechaDesde) {
+      descFechas = `el día ${fmtDiaSemana(l.fechaDesde)} ${fmtFechaLarga(l.fechaDesde)}`;
+    }
+
+    const html = `
+${membrete()}
+<p class="lugar-fecha">San Miguel de Tucumán, ${fechaDoc}</p>
+<div class="destinatario">
+  <span class="cargo">A la Jefa de Personal de la<br/>Dirección de Arbolado<br/>Mariel Molina</span><br/>
+  <span class="despacho">SU DESPACHO</span>
+</div>
+<p class="cuerpo">Por la presente cumplo en informar que la agente <strong>${l.agente}</strong>, Afiliada N° <strong>${l.afiliado}</strong>, hará uso de <strong>${cantStr}</strong> días de la Prórroga de su ${tipo} Anual Reglamentaria, Resolución N° <strong>${resol}</strong>, ${descFechas}, quedando <strong>${diasRest}</strong> días de la misma.-</p>
+<p class="cierre">Sin otro particular la saludo atte.-</p>
+<div class="firmas">
+  <div><div class="firma-linea">Firma y aclaración</div></div>
+  <div><div class="firma-linea">Director de Arbolado</div></div>
+</div>`;
+    abrirVentanaDoc(`Nota Licencia — ${l.agente}`, html, `Nota_Licencia_${(l.agente||"").replace(/ /g,"_")}`);
+  };
+
+  const printIcon = I.print;
+
   return (
     <div>
-      <PageHeader title="Licencias" sub="Registro de días a cargo de licencia (vacaciones y otros)"><BtnNew onClick={openNew} label="Nueva licencia"/></PageHeader>
+      <PageHeader title="Licencias" sub="Registro y generación de notas de licencia"><BtnNew onClick={openNew} label="Nueva licencia"/></PageHeader>
       <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por agente o N° afiliado..."/></div>
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
@@ -1413,22 +1649,36 @@ function LicenciasPage({ data, up }) {
               <td className="px-4 py-3 text-gray-700">{fmtDate(l.fechaDesde)}</td>
               <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{fmtDate(l.fechaHasta)}</td>
               <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{l.diasTotales||"—"}</td>
-              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(l)} onDelete={()=>setDel(l.id)}/></td>
+              <td className="px-4 py-3 text-right">
+                <div className="flex items-center justify-end gap-0.5">
+                  <button onClick={()=>generarNota(l)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar nota">{printIcon}</button>
+                  <button onClick={()=>openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
+                  <button onClick={()=>setDel(l.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody></table>
       </div></div>
-      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar licencia":"Nueva licencia"}>
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar licencia":"Nueva licencia"} wide>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nombre del agente" span2><input className={inp} value={form.agente} onChange={e=>f("agente",e.target.value)} placeholder="Nombre completo"/></Field>
           <Field label="N° de afiliado"><input className={inp} value={form.afiliado} onChange={e=>f("afiliado",e.target.value)} placeholder="N° afiliado"/></Field>
           <Field label="Tipo de licencia"><select className={sel} value={form.tipoLicencia} onChange={e=>f("tipoLicencia",e.target.value)}>{Object.entries(tipos).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></Field>
           <Field label="Desde"><input type="date" className={inp} value={form.fechaDesde} onChange={e=>f("fechaDesde",e.target.value)}/></Field>
           <Field label="Hasta"><input type="date" className={inp} value={form.fechaHasta} onChange={e=>f("fechaHasta",e.target.value)}/></Field>
-          <Field label="Días totales"><input type="number" min="1" className={inp} value={form.diasTotales} onChange={e=>f("diasTotales",e.target.value)} placeholder="Cantidad de días"/></Field>
-          <Field label="Observaciones"><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas..."/></Field>
+          <Field label="Días que toma"><input type="number" min="1" className={inp} value={form.diasTotales} onChange={e=>f("diasTotales",e.target.value)} placeholder="Cantidad de días"/></Field>
+          <Field label="N° Resolución de licencia"><input className={inp} value={form.resolucion||""} onChange={e=>f("resolucion",e.target.value)} placeholder="Ej: 3560/SSP/25"/></Field>
+          <Field label="Días restantes de la licencia"><input type="number" min="0" className={inp} value={form.diasRestantes||""} onChange={e=>f("diasRestantes",e.target.value)} placeholder="Días que quedan"/></Field>
+          <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas..."/></Field>
         </div>
-        <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
+        <div className="flex justify-between mt-6">
+          <button onClick={()=>{ if(form.agente.trim()) generarNota(form); }} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">{printIcon} Vista previa</button>
+          <div className="flex gap-3">
+            <button onClick={()=>setModal(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
+            <button onClick={save} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Guardar</button>
+          </div>
+        </div>
       </Modal>
       <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="esta licencia"/>
     </div>
@@ -1436,14 +1686,14 @@ function LicenciasPage({ data, up }) {
 }
 
 // ═══════════════════════════════
-// RESOLUCIONES
+// RESOLUCIONES (generales)
 // ═══════════════════════════════
 function ResolucionesPage({ data, up }) {
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
-  const empty = { numero:"", asunto:"", fecha:"", observaciones:"" };
+  const empty = { numero:"", asunto:"", fecha:"", cuerpo:"", observaciones:"" };
   const [form, setForm] = useState(empty);
 
   const list = useMemo(() => {
@@ -1452,14 +1702,45 @@ function ResolucionesPage({ data, up }) {
   }, [data.resoluciones, search]);
 
   const openNew = () => { setForm({...empty,fecha:hoy()}); setEditing(null); setModal(true); };
-  const openEdit = (r) => { setForm({...r}); setEditing(r.id); setModal(true); };
-  const save = () => { if(!form.numero.trim()) return; const id = editing || uid(); up(p=> editing ? {...p,resoluciones:p.resoluciones.map(r=>r.id===editing?{...form,id}:r)} : {...p,resoluciones:[...p.resoluciones,{...form,id}]}); (editing ? sbUpdate("resoluciones", id, form) : sbInsert("resoluciones", id, form)); setModal(false); };
+  const openEdit = (r) => { setForm({cuerpo:"", ...r}); setEditing(r.id); setModal(true); };
+  const save = () => {
+    if (!form.numero.trim()) return;
+    const id = editing || uid();
+    up(p => editing ? {...p,resoluciones:p.resoluciones.map(r=>r.id===editing?{...form,id}:r)} : {...p,resoluciones:[...p.resoluciones,{...form,id}]});
+    (editing ? sbUpdate("resoluciones", id, form) : sbInsert("resoluciones", id, form));
+    setModal(false);
+  };
   const remove = () => { up(p=>({...p,resoluciones:p.resoluciones.filter(r=>r.id!==del)})); sbDelete("resoluciones", del); setDel(null); };
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
 
+  const generarResolucion = (r) => {
+    const fechaDoc = fmtFechaLarga(r.fecha || hoy());
+    const cuerpo = (r.cuerpo || "").split("\n").filter(l=>l.trim()).map(l=>`<p class="cuerpo-resolucion">${l}</p>`).join("") || `<p class="cuerpo-resolucion">[Texto de la resolución]</p>`;
+    const html = `
+${membrete()}
+<p class="lugar-fecha">San Miguel de Tucumán, ${fechaDoc}</p>
+<p class="resolucion-titulo">Resolución Nº ${r.numero}</p>
+<p class="seccion">Visto:</p>
+<p class="cuerpo-resolucion">${r.asunto}; y</p>
+<p class="seccion">Considerando:</p>
+${cuerpo}
+<p class="seccion">Por ello,</p>
+<p class="seccion" style="font-size:12pt">El Director de Arbolado</p>
+<p class="seccion">Resuelve</p>
+<p class="articulo"><strong>Artículo 1°.-</strong> [Texto del artículo resolutivo]</p>
+<p class="articulo"><strong>Artículo 2°.-</strong> Regístrese, comuníquese y archívese.-</p>
+<div class="firmas">
+  <div><div class="firma-linea">Firma y aclaración</div></div>
+  <div><div class="firma-linea">Director de Arbolado</div></div>
+</div>`;
+    abrirVentanaDoc(`Resolución N° ${r.numero}`, html, `Resolucion_${r.numero.replace(/\//g,"-")}`);
+  };
+
+  const printIcon = I.print;
+
   return (
     <div>
-      <PageHeader title="Resoluciones" sub="Registro de resoluciones"><BtnNew onClick={openNew} label="Nueva resolución"/></PageHeader>
+      <PageHeader title="Resoluciones" sub="Registro y generación de resoluciones"><BtnNew onClick={openNew} label="Nueva resolución"/></PageHeader>
       <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por número o asunto..."/></div>
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
@@ -1471,19 +1752,32 @@ function ResolucionesPage({ data, up }) {
               <td className="px-4 py-3 text-gray-700">{r.asunto}</td>
               <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{fmtDate(r.fecha)}</td>
               <td className="px-4 py-3 text-gray-500 hidden md:table-cell max-w-[200px] truncate">{r.observaciones||"—"}</td>
-              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(r)} onDelete={()=>setDel(r.id)}/></td>
+              <td className="px-4 py-3 text-right">
+                <div className="flex items-center justify-end gap-0.5">
+                  <button onClick={()=>generarResolucion(r)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar resolución">{printIcon}</button>
+                  <button onClick={()=>openEdit(r)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
+                  <button onClick={()=>setDel(r.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody></table>
       </div></div>
-      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar resolución":"Nueva resolución"}>
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar resolución":"Nueva resolución"} wide>
         <div className="grid grid-cols-2 gap-4">
           <Field label="N° de Resolución"><input className={inp} value={form.numero} onChange={e=>f("numero",e.target.value)} placeholder="Ej: 0123/2026"/></Field>
           <Field label="Fecha"><input type="date" className={inp} value={form.fecha} onChange={e=>f("fecha",e.target.value)}/></Field>
-          <Field label="Asunto" span2><textarea className={inp+" resize-none"} rows={2} value={form.asunto} onChange={e=>f("asunto",e.target.value)} placeholder="Asunto de la resolución"/></Field>
-          <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas adicionales..."/></Field>
+          <Field label="Asunto (Visto)" span2><textarea className={inp+" resize-none"} rows={2} value={form.asunto} onChange={e=>f("asunto",e.target.value)} placeholder="Asunto de la resolución"/></Field>
+          <Field label="Considerando (texto del cuerpo)" span2><textarea className={inp+" resize-none"} rows={4} value={form.cuerpo||""} onChange={e=>f("cuerpo",e.target.value)} placeholder="Desarrollo de la resolución. Cada párrafo en una línea."/></Field>
+          <Field label="Observaciones internas" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas internas (no se imprimen)"/></Field>
         </div>
-        <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
+        <div className="flex justify-between mt-6">
+          <button onClick={()=>{ if(form.numero.trim()) generarResolucion(form); }} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">{printIcon} Vista previa</button>
+          <div className="flex gap-3">
+            <button onClick={()=>setModal(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
+            <button onClick={save} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Guardar</button>
+          </div>
+        </div>
       </Modal>
       <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="esta resolución"/>
     </div>

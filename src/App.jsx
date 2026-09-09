@@ -160,6 +160,7 @@ const PV_ESTADOS = {
   remitido_catastro: { l:"Remitido a Catastro", c:"green" },
 };
 const esAsuntoPatrimonioVegetal = (asunto) => (asunto||"").toLowerCase().includes("patrimonio vegetal");
+const esResolucionCompensatorio = (r) => (r.tipoResolucion || "") === "compensatorio";
 
 const defaultState = {
   expedientes: [], compras: [], cajaChica: { presupuesto: 0, registros: [] },
@@ -1408,6 +1409,63 @@ const numLetrasConParentesis = (n) => {
   return `${String(ni).padStart(2,"0")} (${numLetras(n)})`;
 };
 
+// ─── Generación de documentos compartidos entre Descansos y Resoluciones ───
+const generarResolucionComp = (d) => {
+  const fechas = d.fechas || (d.fecha ? [d.fecha] : []);
+  const fechasValidas = fechas.filter(f=>f);
+  const cantDias = fechasValidas.length;
+  const listFechas = fechasValidas.map(f=>`${fmtDiaSemana(f)} ${fmtFechaLarga(f)}`).join(", ");
+  const numRes = d.numeroResolucion || d.numero || "____";
+  const fechaDoc = fmtFechaLarga(hoy());
+  const html = `
+${membrete()}
+<p class="resolucion-titulo">RESOLUCIÓN N° ${numRes}</p>
+<p class="lugar-fecha">San Miguel de Tucumán, ${fechaDoc}</p>
+<p class="seccion">VISTO:</p>
+<p class="cuerpo-resolucion">La necesidad de contar con personal que cumpla tareas específicas, relacionadas a trabajos operativos en la Dirección de Arbolado; y</p>
+<p class="seccion">CONSIDERANDO:</p>
+<p class="cuerpo-resolucion">Que atento a lo precedentemente expuesto resulta necesario emitir el pertinente acto administrativo, disponiendo los descansos compensatorios, para los agentes que prestan servicios en la Dirección de Arbolado, que trabajaron en la Dirección de Arbolado fuera de su horario habitual.</p>
+<p class="seccion">POR ELLO,</p>
+<p class="seccion-centro">EL DIRECTOR DE ARBOLADO</p>
+<p class="seccion-centro">RESUELVE</p>
+<p class="articulo"><strong>Artículo 1°.-</strong> Disponer los días de descansos compensatorios correspondientes por trabajar en exceso de horas, para el personal que prestó servicios en la Dirección de Arbolado, realizando trabajos operativos fuera de su horario habitual, a fin de que por su desempeño en tareas operativas se le otorguen los descansos compensatorios correspondientes a los agentes que se detallan a continuación:</p>
+<p style="font-weight:bold;text-align:center;margin:14px 0 8px;font-size:10.5pt;text-transform:uppercase;letter-spacing:0.5px">Listado de Agentes</p>
+<table class="agentes">
+  <thead><tr><th>N°</th><th>Afiliado</th><th>Apellido y Nombre</th><th>Días</th><th>Compensatorio Fecha</th></tr></thead>
+  <tbody><tr><td style="text-align:center">01</td><td>${d.afiliado||""}</td><td>${d.agente}</td><td style="text-align:center">${cantDias}</td><td>${listFechas}</td></tr></tbody>
+</table>
+<p class="articulo"><strong>Artículo 2°.-</strong> Notificar al agente y al encargado de personal para su conocimiento y archivo.</p>
+<p class="articulo"><strong>Artículo 3°.-</strong> Regístrese, comuníquese y archívese.-</p>
+<div class="firmas">
+  <div><div class="firma-linea">Firma y aclaración</div></div>
+  <div><div class="firma-linea">Director de Arbolado</div></div>
+</div>`;
+  abrirVentanaDoc(`Resolución Descanso — ${d.agente}`, html, `Resolucion_Descanso_${(d.agente||"").replace(/ /g,"_")}`);
+};
+
+const generarResolucionGeneral = (r) => {
+  const fechaDoc = fmtFechaLarga(r.fecha || hoy());
+  const cuerpo = (r.cuerpo || "").split("\n").filter(l=>l.trim()).map(l=>`<p class="cuerpo-resolucion">${l}</p>`).join("") || `<p class="cuerpo-resolucion">[Texto de la resolución]</p>`;
+  const html = `
+${membrete()}
+<p class="resolucion-titulo">RESOLUCIÓN N° ${r.numero}</p>
+<p class="lugar-fecha">San Miguel de Tucumán, ${fechaDoc}</p>
+<p class="seccion">VISTO:</p>
+<p class="cuerpo-resolucion">${r.asunto}; y</p>
+<p class="seccion">CONSIDERANDO:</p>
+${cuerpo}
+<p class="seccion">POR ELLO,</p>
+<p class="seccion-centro">EL DIRECTOR DE ARBOLADO</p>
+<p class="seccion-centro">RESUELVE</p>
+<p class="articulo"><strong>Artículo 1°.-</strong> [Texto del artículo resolutivo]</p>
+<p class="articulo"><strong>Artículo 2°.-</strong> Regístrese, comuníquese y archívese.-</p>
+<div class="firmas">
+  <div><div class="firma-linea">Firma y aclaración</div></div>
+  <div><div class="firma-linea">Director de Arbolado</div></div>
+</div>`;
+  abrirVentanaDoc(`Resolución N° ${r.numero}`, html, `Resolucion_${r.numero.replace(/\//g,"-")}`);
+};
+
 // ═══════════════════════════════
 // DESCANSOS COMPENSATORIOS
 // ═══════════════════════════════
@@ -1420,99 +1478,118 @@ function DescansosPage({ data, up }) {
   const empty = { agente:"", afiliado:"", fechas:[""], numeroResolucion:"", observaciones:"" };
   const [form, setForm] = useState(empty);
 
+  // Resoluciones de tipo compensatorio vinculadas automáticamente (fuente única)
+  const vinculados = useMemo(() =>
+    (data.resoluciones||[]).filter(r => esResolucionCompensatorio(r)).map(r => ({
+      ...r,
+      // Normalizar campos para que el componente los use igual que un descanso nativo
+      agente: r.agente || "",
+      afiliado: r.afiliado || "",
+      fechas: r.fechas || (r.fechaDescanso ? [r.fechaDescanso] : []),
+      numeroResolucion: r.numero || "",
+      source: "resolucion",
+    })),
+  [data.resoluciones]);
+
+  // Registros nativos de Descansos (sin resolución vinculada, o anteriores a la integración)
+  const legacy = useMemo(() =>
+    (data.descansos||[]).map(d => ({...d, source:"descanso"})),
+  [data.descansos]);
+
+  // Combined: deduplicar por N° de resolución (prioridad: vinculado desde Resoluciones)
+  const combined = useMemo(() => {
+    const vistos = new Set();
+    const resultado = [];
+    for (const r of vinculados) {
+      const key = (r.numeroResolucion||"").trim().toLowerCase();
+      if (key) vistos.add(key);
+      resultado.push(r);
+    }
+    for (const d of legacy) {
+      const key = (d.numeroResolucion||"").trim().toLowerCase();
+      if (key && vistos.has(key)) continue; // ya está representado por el lado de Resoluciones
+      resultado.push(d);
+    }
+    return resultado.reverse();
+  }, [vinculados, legacy]);
+
   const list = useMemo(() => {
     const q = search.toLowerCase();
-    return [...data.descansos].reverse().filter(d => d.agente.toLowerCase().includes(q)||d.afiliado.toLowerCase().includes(q));
-  }, [data.descansos, search]);
+    return combined.filter(d => (d.agente||"").toLowerCase().includes(q)||(d.afiliado||"").toLowerCase().includes(q)||(d.numeroResolucion||"").toLowerCase().includes(q));
+  }, [combined, search]);
 
   const openNew = () => { setForm({...empty,fechas:[hoy()]}); setEditing(null); setModal(true); };
   const openEdit = (d) => {
-    // Compatibilidad con registros viejos (campo "fecha" singular)
     const fechas = d.fechas || (d.fecha ? [d.fecha] : [hoy()]);
-    setForm({...d, fechas});
-    setEditing(d.id);
+    setForm({...d, fechas, source: d.source});
+    setEditing(d);
     setModal(true);
   };
   const save = () => {
     if (!form.agente.trim()) return;
-    const id = editing || uid();
     const reg = {...form, fechas: form.fechas.filter(f=>f)};
-    up(p => editing ? {...p,descansos:p.descansos.map(d=>d.id===editing?{...reg,id}:d)} : {...p,descansos:[...p.descansos,{...reg,id}]});
-    (editing ? sbUpdate("descansos", id, reg) : sbInsert("descansos", id, reg));
+    if (editing && editing.source === "resolucion") {
+      // Editar la resolución original con los datos actualizados
+      const id = editing.id;
+      const updated = {...(data.resoluciones.find(r=>r.id===id)||{}), ...reg, id, numero: reg.numeroResolucion||editing.numero };
+      up(p => ({...p, resoluciones: p.resoluciones.map(r=>r.id===id?updated:r)}));
+      sbUpdate("resoluciones", id, updated);
+    } else if (editing && editing.source === "descanso") {
+      const id = editing.id;
+      up(p => ({...p, descansos: p.descansos.map(d=>d.id===id?{...reg,id}:d)}));
+      sbUpdate("descansos", id, reg);
+    } else {
+      // Nuevo: se crea como descanso nativo
+      const id = uid();
+      up(p => ({...p, descansos:[...p.descansos,{...reg,id}]}));
+      sbInsert("descansos", id, reg);
+    }
     setModal(false);
   };
-  const remove = () => { up(p=>({...p,descansos:p.descansos.filter(d=>d.id!==del)})); sbDelete("descansos", del); setDel(null); };
+  const remove = () => {
+    if (del.source === "resolucion") {
+      up(p=>({...p, resoluciones:p.resoluciones.filter(r=>r.id!==del.id)}));
+      sbDelete("resoluciones", del.id);
+    } else {
+      up(p=>({...p, descansos:p.descansos.filter(d=>d.id!==del.id)}));
+      sbDelete("descansos", del.id);
+    }
+    setDel(null);
+  };
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
   const setFecha = (i, v) => setForm(p => { const fs=[...p.fechas]; fs[i]=v; return {...p,fechas:fs}; });
   const addFecha = () => setForm(p=>({...p,fechas:[...p.fechas,""]}));
   const removeFecha = (i) => setForm(p=>({...p,fechas:p.fechas.filter((_,idx)=>idx!==i)}));
 
-  // Generar documento Resolución de Descanso
-  const generarResolucion = (d) => {
-    const fechas = d.fechas || (d.fecha ? [d.fecha] : []);
-    const fechasValidas = fechas.filter(f=>f);
-    const cantDias = fechasValidas.length;
-    const listFechas = fechasValidas.map(f=>`${fmtDiaSemana(f)} ${fmtFechaLarga(f)}`).join(", ");
-    const numRes = d.numeroResolucion || "____";
-    const fechaDoc = fmtFechaLarga(hoy());
-
-    const html = `
-${membrete()}
-<p class="resolucion-titulo">RESOLUCIÓN N° ${numRes}</p>
-<p class="lugar-fecha">San Miguel de Tucumán, ${fechaDoc}</p>
-
-<p class="seccion">VISTO:</p>
-<p class="cuerpo-resolucion">La necesidad de contar con personal que cumpla tareas específicas, relacionadas a trabajos operativos en la Dirección de Arbolado; y</p>
-
-<p class="seccion">CONSIDERANDO:</p>
-<p class="cuerpo-resolucion">Que atento a lo precedentemente expuesto resulta necesario emitir el pertinente acto administrativo, disponiendo los descansos compensatorios, para los agentes que prestan servicios en la Dirección de Arbolado, que trabajaron en la Dirección de Arbolado fuera de su horario habitual.</p>
-
-<p class="seccion">POR ELLO,</p>
-<p class="seccion-centro">EL DIRECTOR DE ARBOLADO</p>
-<p class="seccion-centro">RESUELVE</p>
-
-<p class="articulo"><strong>Artículo 1°.-</strong> Disponer los días de descansos compensatorios correspondientes por trabajar en exceso de horas, para el personal que prestó servicios en la Dirección de Arbolado, realizando trabajos operativos fuera de su horario habitual, a fin de que por su desempeño en tareas operativas se le otorguen los descansos compensatorios correspondientes a los agentes que se detallan a continuación:</p>
-
-<p style="font-weight:bold;text-align:center;margin:14px 0 8px;font-size:10.5pt;text-transform:uppercase;letter-spacing:0.5px">Listado de Agentes</p>
-<table class="agentes">
-  <thead><tr><th>N°</th><th>Afiliado</th><th>Apellido y Nombre</th><th>Días</th><th>Compensatorio Fecha</th></tr></thead>
-  <tbody><tr><td style="text-align:center">01</td><td>${d.afiliado||""}</td><td>${d.agente}</td><td style="text-align:center">${cantDias}</td><td>${listFechas}</td></tr></tbody>
-</table>
-
-<p class="articulo"><strong>Artículo 2°.-</strong> Notificar al agente y al encargado de personal para su conocimiento y archivo.</p>
-
-<p class="articulo"><strong>Artículo 3°.-</strong> Regístrese, comuníquese y archívese.-</p>
-
-<div class="firmas">
-  <div><div class="firma-linea">Firma y aclaración</div></div>
-  <div><div class="firma-linea">Director de Arbolado</div></div>
-</div>`;
-    abrirVentanaDoc(`Resolución Descanso — ${d.agente}`, html, `Resolucion_Descanso_${(d.agente||"").replace(/ /g,"_")}`);
-  };
+  // Generar documento Resolución de Descanso — referencia a función de módulo
+  const generarResolucion = generarResolucionComp;
 
   const printIcon = I.print;
 
   return (
     <div>
-      <PageHeader title="Descansos Compensatorios" sub="Registro y generación de resoluciones de descanso"><BtnNew onClick={openNew} label="Nuevo registro"/></PageHeader>
-      <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por agente o N° afiliado..."/></div>
+      <PageHeader title="Descansos Compensatorios" sub="Vinculado automáticamente con Resoluciones de tipo compensatorio"><BtnNew onClick={openNew} label="Nuevo registro"/></PageHeader>
+      <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por agente, afiliado o N° resolución..."/></div>
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
-          <TH>Agente</TH><TH>N° Afiliado</TH><TH>Fecha(s) descanso</TH><TH className="hidden sm:table-cell">N° Resolución</TH><TH className="text-right">Acciones</TH>
+          <TH>Agente</TH><TH>N° Afiliado</TH><TH>Fecha(s) descanso</TH><TH className="hidden sm:table-cell">N° Resolución</TH><TH className="hidden md:table-cell">Origen</TH><TH className="text-right">Acciones</TH>
         </tr></thead><tbody className="divide-y divide-gray-50">
-          {list.length===0 ? <EmptyRow cols={5} text={search?"Sin resultados":"Sin descansos registrados"}/> : list.map(d => {
+          {list.length===0 ? <EmptyRow cols={6} text={search?"Sin resultados":"Sin descansos registrados"}/> : list.map(d => {
             const fechas = d.fechas || (d.fecha ? [d.fecha] : []);
             return (
-              <tr key={d.id} className="hover:bg-gray-50/50">
+              <tr key={d.id} className={`hover:bg-gray-50/50 ${d.source==="resolucion"?"border-l-4 border-l-blue-400":""}`}>
                 <td className="px-4 py-3 font-medium text-gray-900">{d.agente}</td>
                 <td className="px-4 py-3 text-gray-700">{d.afiliado}</td>
                 <td className="px-4 py-3 text-gray-700 text-xs">{fechas.map(f=>fmtDate(f)).join(", ")||"—"}</td>
                 <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{d.numeroResolucion||"—"}</td>
+                <td className="px-4 py-3 hidden md:table-cell">
+                  {d.source==="resolucion" ? <Badge label="Vinculado a Resolución" color="blue"/> : <Badge label="Registro propio" color="gray"/>}
+                </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-0.5">
                     <button onClick={()=>generarResolucion(d)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar resolución">{printIcon}</button>
                     <button onClick={()=>openEdit(d)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
-                    <button onClick={()=>setDel(d.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                    <button onClick={()=>setDel(d)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
                   </div>
                 </td>
               </tr>
@@ -1520,6 +1597,7 @@ ${membrete()}
           })}
         </tbody></table>
       </div></div>
+      <p className="text-xs text-gray-400 mt-3 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block"/> Las resoluciones de tipo "Descanso compensatorio" aparecen automáticamente aquí — un único registro, editable desde ambos módulos.</p>
       <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar descanso":"Nuevo descanso compensatorio"} wide>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nombre del agente" span2><input className={inp} value={form.agente} onChange={e=>f("agente",e.target.value)} placeholder="Nombre completo"/></Field>
@@ -1681,47 +1759,47 @@ function ResolucionesPage({ data, up }) {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
-  const empty = { numero:"", asunto:"", fecha:"", cuerpo:"", observaciones:"" };
+  const empty = { numero:"", asunto:"", fecha:"", cuerpo:"", tipoResolucion:"general", agente:"", afiliado:"", fechas:[""], observaciones:"" };
   const [form, setForm] = useState(empty);
+
+  const esComp = esResolucionCompensatorio(form);
 
   const list = useMemo(() => {
     const q = search.toLowerCase();
-    return [...data.resoluciones].reverse().filter(r => r.numero.toLowerCase().includes(q)||r.asunto.toLowerCase().includes(q));
+    return [...data.resoluciones].reverse().filter(r => r.numero.toLowerCase().includes(q)||r.asunto.toLowerCase().includes(q)||(r.agente||"").toLowerCase().includes(q));
   }, [data.resoluciones, search]);
 
-  const openNew = () => { setForm({...empty,fecha:hoy()}); setEditing(null); setModal(true); };
-  const openEdit = (r) => { setForm({cuerpo:"", ...r}); setEditing(r.id); setModal(true); };
+  const openNew = () => { setForm({...empty,fecha:hoy(),fechas:[hoy()]}); setEditing(null); setModal(true); };
+  const openEdit = (r) => { setForm({...empty, fechas:[hoy()], ...r}); setEditing(r.id); setModal(true); };
   const save = () => {
     if (!form.numero.trim()) return;
     const id = editing || uid();
-    up(p => editing ? {...p,resoluciones:p.resoluciones.map(r=>r.id===editing?{...form,id}:r)} : {...p,resoluciones:[...p.resoluciones,{...form,id}]});
-    (editing ? sbUpdate("resoluciones", id, form) : sbInsert("resoluciones", id, form));
+    const reg = { ...form, fechas: (form.fechas||[]).filter(f=>f) };
+    up(p => editing ? {...p,resoluciones:p.resoluciones.map(r=>r.id===editing?{...reg,id}:r)} : {...p,resoluciones:[...p.resoluciones,{...reg,id}]});
+    (editing ? sbUpdate("resoluciones", id, reg) : sbInsert("resoluciones", id, reg));
     setModal(false);
   };
   const remove = () => { up(p=>({...p,resoluciones:p.resoluciones.filter(r=>r.id!==del)})); sbDelete("resoluciones", del); setDel(null); };
   const f = (k,v) => setForm(p=>({...p,[k]:v}));
+  const setFechaR = (i, v) => setForm(p => { const fs=[...(p.fechas||[])]; fs[i]=v; return {...p,fechas:fs}; });
+  const addFechaR = () => setForm(p=>({...p,fechas:[...(p.fechas||[]),""] }));
+  const removeFechaR = (i) => setForm(p=>({...p,fechas:(p.fechas||[]).filter((_,idx)=>idx!==i)}));
 
-  const generarResolucion = (r) => {
-    const fechaDoc = fmtFechaLarga(r.fecha || hoy());
-    const cuerpo = (r.cuerpo || "").split("\n").filter(l=>l.trim()).map(l=>`<p class="cuerpo-resolucion">${l}</p>`).join("") || `<p class="cuerpo-resolucion">[Texto de la resolución]</p>`;
-    const html = `
-${membrete()}
-<p class="lugar-fecha">San Miguel de Tucumán, ${fechaDoc}</p>
-<p class="resolucion-titulo">Resolución Nº ${r.numero}</p>
-<p class="seccion">Visto:</p>
-<p class="cuerpo-resolucion">${r.asunto}; y</p>
-<p class="seccion">Considerando:</p>
-${cuerpo}
-<p class="seccion">Por ello,</p>
-<p class="seccion" style="font-size:12pt">El Director de Arbolado</p>
-<p class="seccion">Resuelve</p>
-<p class="articulo"><strong>Artículo 1°.-</strong> [Texto del artículo resolutivo]</p>
-<p class="articulo"><strong>Artículo 2°.-</strong> Regístrese, comuníquese y archívese.-</p>
-<div class="firmas">
-  <div><div class="firma-linea">Firma y aclaración</div></div>
-  <div><div class="firma-linea">Director de Arbolado</div></div>
-</div>`;
-    abrirVentanaDoc(`Resolución N° ${r.numero}`, html, `Resolucion_${r.numero.replace(/\//g,"-")}`);
+  // Reutiliza la función de generación de compensatorio si es de ese tipo
+  const handleGenerar = (r) => {
+    if (esResolucionCompensatorio(r)) {
+      // Construir objeto compatible con generarResolucion de Descansos
+      const dComp = {
+        ...r,
+        agente: r.agente||"",
+        afiliado: r.afiliado||"",
+        fechas: r.fechas||(r.fechaDescanso?[r.fechaDescanso]:[]),
+        numeroResolucion: r.numero||"",
+      };
+      generarResolucionComp(dComp);
+    } else {
+      generarResolucionGeneral(r);
+    }
   };
 
   const printIcon = I.print;
@@ -1729,20 +1807,28 @@ ${cuerpo}
   return (
     <div>
       <PageHeader title="Resoluciones" sub="Registro y generación de resoluciones"><BtnNew onClick={openNew} label="Nueva resolución"/></PageHeader>
-      <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por número o asunto..."/></div>
+      <div className="mb-4 max-w-sm"><SearchBar value={search} onChange={setSearch} placeholder="Buscar por número, asunto o agente..."/></div>
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
         <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
-          <TH>N° Resolución</TH><TH>Asunto</TH><TH className="hidden sm:table-cell">Fecha</TH><TH className="hidden md:table-cell">Observaciones</TH><TH className="text-right">Acciones</TH>
+          <TH>N° Resolución</TH><TH>Tipo</TH><TH>Asunto / Agente</TH><TH className="hidden sm:table-cell">Fecha</TH><TH className="text-right">Acciones</TH>
         </tr></thead><tbody className="divide-y divide-gray-50">
           {list.length===0 ? <EmptyRow cols={5} text={search?"Sin resultados":"Sin resoluciones registradas"}/> : list.map(r => (
-            <tr key={r.id} className="hover:bg-gray-50/50">
+            <tr key={r.id} className={`hover:bg-gray-50/50 ${esResolucionCompensatorio(r)?"border-l-4 border-l-blue-400":""}`}>
               <td className="px-4 py-3 font-medium text-gray-900">{r.numero}</td>
-              <td className="px-4 py-3 text-gray-700">{r.asunto}</td>
+              <td className="px-4 py-3">
+                {esResolucionCompensatorio(r)
+                  ? <Badge label="Compensatorio" color="blue"/>
+                  : <Badge label="General" color="gray"/>}
+              </td>
+              <td className="px-4 py-3 text-gray-700">
+                {esResolucionCompensatorio(r)
+                  ? <span>{r.agente||"—"}</span>
+                  : <span className="max-w-[200px] truncate block">{r.asunto}</span>}
+              </td>
               <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{fmtDate(r.fecha)}</td>
-              <td className="px-4 py-3 text-gray-500 hidden md:table-cell max-w-[200px] truncate">{r.observaciones||"—"}</td>
               <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-0.5">
-                  <button onClick={()=>generarResolucion(r)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar resolución">{printIcon}</button>
+                  <button onClick={()=>handleGenerar(r)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar documento">{printIcon}</button>
                   <button onClick={()=>openEdit(r)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
                   <button onClick={()=>setDel(r.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
                 </div>
@@ -1755,12 +1841,46 @@ ${cuerpo}
         <div className="grid grid-cols-2 gap-4">
           <Field label="N° de Resolución"><input className={inp} value={form.numero} onChange={e=>f("numero",e.target.value)} placeholder="Ej: 0123/2026"/></Field>
           <Field label="Fecha"><input type="date" className={inp} value={form.fecha} onChange={e=>f("fecha",e.target.value)}/></Field>
-          <Field label="Asunto (Visto)" span2><textarea className={inp+" resize-none"} rows={2} value={form.asunto} onChange={e=>f("asunto",e.target.value)} placeholder="Asunto de la resolución"/></Field>
-          <Field label="Considerando (texto del cuerpo)" span2><textarea className={inp+" resize-none"} rows={4} value={form.cuerpo||""} onChange={e=>f("cuerpo",e.target.value)} placeholder="Desarrollo de la resolución. Cada párrafo en una línea."/></Field>
+          <Field label="Tipo de resolución" span2>
+            <select className={sel} value={form.tipoResolucion} onChange={e=>f("tipoResolucion",e.target.value)}>
+              <option value="general">General</option>
+              <option value="compensatorio">Descanso compensatorio — se vincula automáticamente con Descansos Compensatorios</option>
+            </select>
+          </Field>
+
+          {esComp ? (
+            <>
+              {/* Campos específicos de compensatorio */}
+              <Field label="Nombre del agente" span2><input className={inp} value={form.agente||""} onChange={e=>f("agente",e.target.value)} placeholder="Nombre completo del agente"/></Field>
+              <Field label="N° de afiliado"><input className={inp} value={form.afiliado||""} onChange={e=>f("afiliado",e.target.value)} placeholder="N° afiliado"/></Field>
+              <div className="col-span-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fecha(s) del descanso</span>
+                  <button onClick={addFechaR} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">{I.plus} Agregar fecha</button>
+                </div>
+                <div className="space-y-2">
+                  {(form.fechas||[""]).map((f2, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <input type="date" className={inp+" flex-1"} value={f2} onChange={e=>setFechaR(i,e.target.value)}/>
+                      {(form.fechas||[]).length > 1 && <button onClick={()=>removeFechaR(i)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-300 hover:text-rose-400">{I.trash}</button>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="col-span-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                <p className="text-xs text-blue-700 font-semibold">Este registro aparecerá automáticamente en Descansos Compensatorios — es el mismo registro, sin duplicados.</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <Field label="Asunto (Visto)" span2><textarea className={inp+" resize-none"} rows={2} value={form.asunto} onChange={e=>f("asunto",e.target.value)} placeholder="Asunto de la resolución"/></Field>
+              <Field label="Considerando (texto del cuerpo)" span2><textarea className={inp+" resize-none"} rows={4} value={form.cuerpo||""} onChange={e=>f("cuerpo",e.target.value)} placeholder="Desarrollo de la resolución. Cada párrafo en una línea."/></Field>
+            </>
+          )}
           <Field label="Observaciones internas" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Notas internas (no se imprimen)"/></Field>
         </div>
         <div className="flex justify-between mt-6">
-          <button onClick={()=>{ if(form.numero.trim()) generarResolucion(form); }} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">{printIcon} Vista previa</button>
+          <button onClick={()=>{ if(form.numero.trim()) handleGenerar(form); }} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">{printIcon} Vista previa</button>
           <div className="flex gap-3">
             <button onClick={()=>setModal(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
             <button onClick={save} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Guardar</button>

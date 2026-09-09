@@ -11,10 +11,10 @@ const SLIDESHOW_IMAGES = [
 
 // ─── Slideshow background component ───
 function SlideshowBg() {
-  const [current, setCurrent] = React.useState(0);
-  const [fading, setFading] = React.useState(false);
+  const [current, setCurrent] = useState(0);
+  const [fading, setFading] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setFading(true);
       setTimeout(() => {

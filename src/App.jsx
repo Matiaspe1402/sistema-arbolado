@@ -1482,11 +1482,12 @@ function DescansosPage({ data, up }) {
   const vinculados = useMemo(() =>
     (data.resoluciones||[]).filter(r => esResolucionCompensatorio(r)).map(r => ({
       ...r,
-      // Normalizar campos para que el componente los use igual que un descanso nativo
       agente: r.agente || "",
       afiliado: r.afiliado || "",
       fechas: r.fechas || (r.fechaDescanso ? [r.fechaDescanso] : []),
-      numeroResolucion: r.numero || "",
+      // Normalizar: numero es el campo canónico; numeroResolucion es alias para compatibilidad
+      numero: r.numero || r.numeroResolucion || "",
+      numeroResolucion: r.numero || r.numeroResolucion || "",
       source: "resolucion",
     })),
   [data.resoluciones]);
@@ -1518,40 +1519,63 @@ function DescansosPage({ data, up }) {
     return combined.filter(d => (d.agente||"").toLowerCase().includes(q)||(d.afiliado||"").toLowerCase().includes(q)||(d.numeroResolucion||"").toLowerCase().includes(q));
   }, [combined, search]);
 
-  const openNew = () => { setForm({...empty,fechas:[hoy()]}); setEditing(null); setModal(true); };
+  const openNew = () => { setForm({...empty, fechas:[hoy()]}); setEditing(null); setModal(true); };
   const openEdit = (d) => {
     const fechas = d.fechas || (d.fecha ? [d.fecha] : [hoy()]);
-    setForm({...d, fechas, source: d.source});
+    setForm({...d, fechas});
     setEditing(d);
     setModal(true);
   };
+
+  // FUENTE ÚNICA: todo se guarda en `resoluciones` con tipoResolucion:"compensatorio"
+  // Los registros legacy en `descansos` se muestran pero al editarlos se migran automáticamente
   const save = () => {
     if (!form.agente.trim()) return;
-    const reg = {...form, fechas: form.fechas.filter(f=>f)};
+    const fechasFiltradas = (form.fechas||[]).filter(f=>f);
+    const reg = {
+      ...form,
+      fechas: fechasFiltradas,
+      tipoResolucion: "compensatorio",
+      // Normalizar: el número de resolución vive en `numero` (campo de Resoluciones)
+      numero: form.numero || form.numeroResolucion || "",
+      numeroResolucion: form.numero || form.numeroResolucion || "",
+    };
+
     if (editing && editing.source === "resolucion") {
-      // Editar la resolución original con los datos actualizados
+      // Editar resolución existente
       const id = editing.id;
-      const updated = {...(data.resoluciones.find(r=>r.id===id)||{}), ...reg, id, numero: reg.numeroResolucion||editing.numero };
-      up(p => ({...p, resoluciones: p.resoluciones.map(r=>r.id===id?updated:r)}));
+      const updated = { ...reg, id };
+      up(p => ({ ...p, resoluciones: p.resoluciones.map(r => r.id===id ? updated : r) }));
       sbUpdate("resoluciones", id, updated);
     } else if (editing && editing.source === "descanso") {
-      const id = editing.id;
-      up(p => ({...p, descansos: p.descansos.map(d=>d.id===id?{...reg,id}:d)}));
-      sbUpdate("descansos", id, reg);
+      // Migrar legacy descanso → resolución (lo sacamos de descansos y lo ponemos en resoluciones)
+      const oldId = editing.id;
+      const newId = uid();
+      const nuevo = { ...reg, id: newId };
+      up(p => ({
+        ...p,
+        descansos: p.descansos.filter(d => d.id !== oldId),
+        resoluciones: [...p.resoluciones, nuevo],
+      }));
+      sbDelete("descansos", oldId);
+      sbInsert("resoluciones", newId, nuevo);
     } else {
-      // Nuevo: se crea como descanso nativo
+      // Nuevo desde Descansos → va directo a resoluciones
       const id = uid();
-      up(p => ({...p, descansos:[...p.descansos,{...reg,id}]}));
-      sbInsert("descansos", id, reg);
+      const nuevo = { ...reg, id };
+      up(p => ({ ...p, resoluciones: [...p.resoluciones, nuevo] }));
+      sbInsert("resoluciones", id, nuevo);
     }
     setModal(false);
   };
+
   const remove = () => {
     if (del.source === "resolucion") {
-      up(p=>({...p, resoluciones:p.resoluciones.filter(r=>r.id!==del.id)}));
+      up(p => ({ ...p, resoluciones: p.resoluciones.filter(r => r.id !== del.id) }));
       sbDelete("resoluciones", del.id);
     } else {
-      up(p=>({...p, descansos:p.descansos.filter(d=>d.id!==del.id)}));
+      // Legacy descanso
+      up(p => ({ ...p, descansos: p.descansos.filter(d => d.id !== del.id) }));
       sbDelete("descansos", del.id);
     }
     setDel(null);
@@ -1598,11 +1622,11 @@ function DescansosPage({ data, up }) {
         </tbody></table>
       </div></div>
       <p className="text-xs text-gray-400 mt-3 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block"/> Las resoluciones de tipo "Descanso compensatorio" aparecen automáticamente aquí — un único registro, editable desde ambos módulos.</p>
-      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar descanso":"Nuevo descanso compensatorio"} wide>
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar descanso compensatorio":"Nuevo descanso compensatorio"} wide>
         <div className="grid grid-cols-2 gap-4">
           <Field label="Nombre del agente" span2><input className={inp} value={form.agente} onChange={e=>f("agente",e.target.value)} placeholder="Nombre completo"/></Field>
           <Field label="N° de afiliado"><input className={inp} value={form.afiliado} onChange={e=>f("afiliado",e.target.value)} placeholder="N° afiliado"/></Field>
-          <Field label="N° de Resolución"><input className={inp} value={form.numeroResolucion||""} onChange={e=>f("numeroResolucion",e.target.value)} placeholder="Ej: 3560/SSP/25"/></Field>
+          <Field label="N° de Resolución"><input className={inp} value={form.numero||form.numeroResolucion||""} onChange={e=>{f("numero",e.target.value);f("numeroResolucion",e.target.value);}} placeholder="Ej: 3560/SSP/25"/></Field>
           <div className="col-span-2">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fecha(s) del descanso</span>
@@ -1618,6 +1642,9 @@ function DescansosPage({ data, up }) {
             </div>
           </div>
           <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Motivo, notas..."/></Field>
+          <div className="col-span-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+            <p className="text-xs text-blue-700 font-semibold">Este registro se guarda en Resoluciones y aparece automáticamente en ambos módulos.</p>
+          </div>
         </div>
         <div className="flex justify-between mt-6">
           <button onClick={()=>{ if(form.agente.trim()) generarResolucion(form); }} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">{printIcon} Vista previa</button>
@@ -1774,7 +1801,12 @@ function ResolucionesPage({ data, up }) {
   const save = () => {
     if (!form.numero.trim()) return;
     const id = editing || uid();
-    const reg = { ...form, fechas: (form.fechas||[]).filter(f=>f) };
+    const reg = {
+      ...form,
+      fechas: (form.fechas||[]).filter(f=>f),
+      // Para compensatorios, mantener ambos campos sincronizados
+      ...(form.tipoResolucion === "compensatorio" ? { numeroResolucion: form.numero } : {}),
+    };
     up(p => editing ? {...p,resoluciones:p.resoluciones.map(r=>r.id===editing?{...reg,id}:r)} : {...p,resoluciones:[...p.resoluciones,{...reg,id}]});
     (editing ? sbUpdate("resoluciones", id, reg) : sbInsert("resoluciones", id, reg));
     setModal(false);

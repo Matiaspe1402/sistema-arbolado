@@ -555,178 +555,353 @@ export default function App() {
 // ═══════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════
-function Dashboard({ data, setPage }) {
-  const pendC = data.compras.filter(c=>c.estado==="pendiente").length;
-  const mes = new Date().getMonth();
-  const regs = data.cajaChica.registros.filter(r=>r.mes===mes);
-  const gasto = regs.reduce((s,r)=>s+(parseFloat(r.montoTotal)||0),0);
-  const saldo = (parseFloat(data.cajaChica.presupuesto)||0) - gasto;
-  const tActivas = data.tareas.filter(t=>t.estado!=="realizada").length;
-  const descMes = data.descansos.filter(d => { const f = d.fecha; if(!f) return false; return parseInt(f.split("-")[1])===mes+1; }).length;
+// ─── Animated counter hook ───
+function useCountUp(target, duration=800) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (target === 0) { setVal(0); return; }
+    const start = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setVal(Math.round(eased * target));
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [target, duration]);
+  return val;
+}
 
-  // ─── Cumpleaños próximos (7 días, con manejo de cambio de año) ───
-  const cumples = useMemo(() => {
-    const hoyDate = new Date();
-    hoyDate.setHours(0,0,0,0);
-    const personal = data.personal || [];
-    const DIAS_RANGO = 7;
-    const resultados = [];
-
-    personal.forEach(p => {
-      if (!p.fechaNacimiento) return;
-      const partes = p.fechaNacimiento.split("-");
-      if (partes.length < 3) return;
-      const mesNac = parseInt(partes[1], 10);
-      const diaNac = parseInt(partes[2], 10);
-
-      // Probar este año y el siguiente (para el cruce dic→ene)
-      for (let offset = 0; offset <= 1; offset++) {
-        const cumple = new Date(hoyDate.getFullYear() + offset, mesNac - 1, diaNac);
-        cumple.setHours(0,0,0,0);
-        const diffMs = cumple.getTime() - hoyDate.getTime();
-        const diffDias = Math.round(diffMs / (1000 * 60 * 60 * 24));
-        if (diffDias >= 0 && diffDias <= DIAS_RANGO) {
-          resultados.push({ ...p, cumpleFecha: cumple, diffDias });
-          break;
-        }
-      }
-    });
-
-    resultados.sort((a, b) => a.diffDias - b.diffDias);
-    return resultados;
-  }, [data.personal]);
-
-  const DIAS_SEMANA = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
-  const MESES_CORTO = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
-
-  const cumpleLabel = (diff, fecha) => {
-    if (diff === 0) return { text: "HOY", emoji: "🎂", highlight: true };
-    if (diff === 1) return { text: "MAÑANA", emoji: "🎉", highlight: false };
-    return { text: `${fecha.getDate()} ${MESES_CORTO[fecha.getMonth()]}`, emoji: "🎈", highlight: false };
+// ─── Clickable KPI card ───
+function KpiCard({ label, value, sub, color, icon, onClick, delta }) {
+  const accents = {
+    green:"border-l-emerald-500 hover:border-l-emerald-600",
+    blue:"border-l-sky-500 hover:border-l-sky-600",
+    yellow:"border-l-amber-500 hover:border-l-amber-600",
+    red:"border-l-rose-500 hover:border-l-rose-600",
+    purple:"border-l-purple-500 hover:border-l-purple-600",
+    orange:"border-l-orange-500 hover:border-l-orange-600",
   };
+  const num = typeof value === "number" ? value : null;
+  const animated = useCountUp(num || 0);
+  const display = num !== null ? animated : value;
+  return (
+    <button onClick={onClick}
+      className={`bg-white rounded-xl border border-gray-100 border-l-4 ${accents[color]||accents.green} p-4 shadow-sm text-left w-full group transition-all duration-200 hover:shadow-md active:scale-[0.98]`}>
+      <div className="flex items-start justify-between mb-1">
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+        {icon && <span className="text-base opacity-60 group-hover:opacity-100 transition-opacity">{icon}</span>}
+      </div>
+      <p className="text-2xl font-bold text-gray-900 tabular-nums">{display}</p>
+      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+      {delta !== undefined && (
+        <p className={`text-[11px] font-semibold mt-1 ${delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-500" : "text-gray-400"}`}>
+          {delta > 0 ? "↑" : delta < 0 ? "↓" : "–"} {Math.abs(delta)} este mes
+        </p>
+      )}
+    </button>
+  );
+}
 
-  const cumpleHoy = cumples.filter(c => c.diffDias === 0);
-  const cumpleProximos = cumples.filter(c => c.diffDias > 0);
+// ─── Mini bar chart (inline, no lib needed) ───
+function MiniBarChart({ data: bars, colorClass="bg-emerald-500" }) {
+  const max = Math.max(...bars.map(b=>b.v), 1);
+  return (
+    <div className="flex items-end gap-1 h-14">
+      {bars.map((b, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+          <div className="w-full rounded-t-sm transition-all duration-500" style={{height:`${Math.round((b.v/max)*48)+2}px`}}>
+            <div className={`w-full h-full rounded-t-sm ${colorClass} opacity-80`}/>
+          </div>
+          <span className="text-[9px] text-gray-400 leading-none">{b.l}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Dashboard({ data, setPage }) {
+  const ahora = new Date();
+  const hora = ahora.getHours();
+  const saludo = hora < 12 ? "Buenos días" : hora < 19 ? "Buenas tardes" : "Buenas noches";
+  const mes = ahora.getMonth();
+  const anio = ahora.getFullYear();
+  const [filtroGestion, setFiltroGestion] = useState("30"); // "7"|"30"|"90"
+  const [lastUpdate] = useState(new Date());
+
+  // ─── Datos calculados ───
+  const pendC = data.compras.filter(c=>c.estado==="pendiente").length;
+  const regs = data.cajaChica.registros.filter(r=>r.mes===mes&&r.anio===anio);
+  const gasto = useMemo(()=>regs.reduce((s,r)=>{
+    const arts=r.articulos||[{importeUnitario:r.montoPorUnidad||r.montoTotal||0,cantidad:r.cantidad||1}];
+    return s+arts.reduce((a,x)=>(parseFloat(x.cantidad)||1)*(parseFloat(x.importeUnitario)||0)+a,0);
+  },0),[regs]);
+  const presupuesto = parseFloat(data.cajaChica.presupuesto)||0;
+  const saldo = presupuesto - gasto;
+  const pctCaja = presupuesto>0 ? Math.min((gasto/presupuesto)*100,100) : 0;
+  const tActivas = data.tareas.filter(t=>t.estado!=="realizada").length;
+  const tAltaPrioridad = data.tareas.filter(t=>t.prioridad==="alta"&&t.estado!=="realizada").length;
+  const pvCount = data.expedientes.filter(e=>esAsuntoPatrimonioVegetal(e.asunto)).length;
+
+  // ─── Cumpleaños próximos ───
+  const cumples = useMemo(()=>{
+    const h=new Date(); h.setHours(0,0,0,0);
+    return (data.personal||[]).reduce((acc,p)=>{
+      if(!p.fechaNacimiento) return acc;
+      const [,m,d]=p.fechaNacimiento.split("-");
+      for(let off=0;off<=1;off++){
+        const c=new Date(h.getFullYear()+off,parseInt(m,10)-1,parseInt(d,10));
+        c.setHours(0,0,0,0);
+        const diff=Math.round((c-h)/86400000);
+        if(diff>=0&&diff<=7){acc.push({...p,cumpleFecha:c,diffDias:diff});break;}
+      }
+      return acc;
+    },[]).sort((a,b)=>a.diffDias-b.diffDias);
+  },[data.personal]);
+
+  // ─── Alertas pendientes ───
+  const alertas = useMemo(()=>{
+    const a=[];
+    if(pendC>0) a.push({tipo:"compras",texto:`${pendC} compra${pendC>1?"s":""} pendiente${pendC>1?"s":""}`,icono:"🛒",color:"yellow",action:"compras"});
+    if(tAltaPrioridad>0) a.push({tipo:"tareas",texto:`${tAltaPrioridad} tarea${tAltaPrioridad>1?"s":""} de alta prioridad sin resolver`,icono:"🔴",color:"red",action:"tareas"});
+    const licPend=(data.licencias||[]).filter(l=>{ if(!l.fechaHasta) return false; const f=new Date(l.fechaHasta); return f>=new Date()&&f<=new Date(Date.now()+7*86400000);});
+    if(licPend.length>0) a.push({tipo:"licencias",texto:`${licPend.length} licencia${licPend.length>1?"s":""} vencen en 7 días`,icono:"📅",color:"orange",action:"licencias"});
+    if(saldo<0) a.push({tipo:"caja",texto:`Caja Chica excede el presupuesto por ${fmtMoney(Math.abs(saldo))}`,icono:"💸",color:"red",action:"cajaChica"});
+    return a;
+  },[pendC,tAltaPrioridad,data.licencias,saldo]);
+
+  // ─── Intervenciones por tipo y filtro temporal ───
+  const gestionData = useMemo(()=>{
+    const dias=parseInt(filtroGestion,10);
+    const cutoff=new Date(Date.now()-dias*86400000);
+    const tipos=["podas","extracciones","plantaciones","tocones"];
+    const labels={"podas":"Podas","extracciones":"Extr.","plantaciones":"Plant.","tocones":"Toc."};
+    return tipos.map(t=>{
+      const count=(data.gestionArbolado||[]).filter(g=>g.tipo===t&&(g.fechaTrabajo?new Date(g.fechaTrabajo)>=cutoff:true)).length;
+      return {tipo:t,label:labels[t],count};
+    });
+  },[data.gestionArbolado,filtroGestion]);
+
+  const totalGestion = gestionData.reduce((s,g)=>s+g.count,0);
+
+  // ─── Timeline de actividad reciente ───
+  const timeline = useMemo(()=>{
+    const items=[];
+    [...data.expedientes].slice(-4).reverse().forEach(e=>items.push({id:e.id,tipo:"expediente",texto:`Expediente ${e.numero}`,sub:e.causante,fecha:e.fechaIngreso,icono:"📄",color:"blue",action:"expedientes"}));
+    [...(data.resoluciones||[])].filter(r=>r.fecha).slice(-3).reverse().forEach(r=>items.push({id:r.id,tipo:"resolucion",texto:`Resolución ${r.numero}`,sub:esResolucionCompensatorio(r)?"Compensatorio":r.asunto,fecha:r.fecha,icono:"📋",color:"purple",action:"resoluciones"}));
+    [...(data.gestionArbolado||[])].slice(-3).reverse().forEach(g=>items.push({id:g.id,tipo:"gestion",texto:`${g.tipo.charAt(0).toUpperCase()+g.tipo.slice(1)}: ${g.domicilio||g.numeroReclamo||""}`,sub:g.responsable?.replace(/_/g," ")||"",fecha:g.fechaTrabajo,icono:"🌳",color:"green",action:g.tipo}));
+    [...(data.entregas||[])].slice(-3).reverse().forEach(e=>items.push({id:e.id,tipo:"entrega",texto:`Entrega: ${e.articulo}`,sub:`${e.entregadoPor} → ${e.recibidoPor}`,fecha:e.fecha,icono:"📦",color:"orange",action:"entregas"}));
+    return items.filter(i=>i.fecha).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).slice(0,8);
+  },[data]);
+
+  const MESES_CORTO=["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+  const cumpleLabel=(diff,fecha)=>{
+    if(diff===0) return {text:"HOY",emoji:"🎂",cls:"text-amber-700 bg-amber-50"};
+    if(diff===1) return {text:"MAÑANA",emoji:"🎉",cls:"text-blue-700 bg-blue-50"};
+    return {text:`${fecha.getDate()} ${MESES_CORTO[fecha.getMonth()]}`,emoji:"🎈",cls:"text-gray-600 bg-gray-50"};
+  };
+  const timelineColor={blue:"bg-sky-100 text-sky-600",purple:"bg-purple-100 text-purple-600",green:"bg-emerald-100 text-emerald-700",orange:"bg-orange-100 text-orange-700"};
 
   return (
-    <div>
-      <PageHeader title="Panel de Control" sub="Resumen general — Dirección de Arbolado"/>
+    <div className="space-y-6">
+      {/* ═══ ENCABEZADO ═══ */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">{saludo} 👋</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {ahora.toLocaleDateString("es-AR",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"/>
+          Actualizado {lastUpdate.toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}
+        </div>
+      </div>
 
-      {/* ═══ AVISOS Y NOVEDADES ═══ */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-8 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-2.5">
-          <span className="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center text-sm">🔔</span>
-          <h3 className="font-bold text-gray-900 text-sm">Avisos y Novedades</h3>
+      {/* ═══ FILA SUPERIOR: AVISOS + REQUIERE ATENCIÓN ═══ */}
+      <div className="grid lg:grid-cols-2 gap-4">
+
+        {/* Avisos y Novedades */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center text-xs">🔔</span>
+            <h3 className="font-bold text-gray-900 text-sm">Avisos y Novedades</h3>
+            {cumples.length>0 && <span className="ml-auto text-[11px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">{cumples.length}</span>}
+          </div>
+          {cumples.length===0 ? (
+            <div className="px-5 py-6 text-center text-sm text-gray-400">Sin cumpleaños en los próximos 7 días</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {cumples.map((p,i)=>{
+                const info=cumpleLabel(p.diffDias,p.cumpleFecha);
+                return (
+                  <div key={i} className={`px-5 py-3 flex items-center gap-3 ${p.diffDias===0?"bg-amber-50/40":""}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${p.diffDias===0?"bg-amber-200 text-amber-800":"bg-emerald-100 text-emerald-700"}`}>
+                      {(p.nombre||"?")[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                      <p className="text-xs text-gray-500">{p.funcion||"Dirección de Arbolado"}</p>
+                    </div>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0 ${info.cls}`}>{info.emoji} {info.text}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
-        {cumples.length === 0 ? (
-          <div className="px-5 py-8 text-center">
-            <p className="text-sm text-gray-400">No hay cumpleaños próximos en los próximos 7 días.</p>
+        {/* Requiere Atención */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center text-xs">⚠️</span>
+            <h3 className="font-bold text-gray-900 text-sm">Requiere Atención</h3>
+            {alertas.length>0 && <span className="ml-auto text-[11px] bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">{alertas.length}</span>}
           </div>
-        ) : (
-          <div className="p-5">
-            {/* Cumpleaños HOY */}
-            {cumpleHoy.length > 0 && (
-              <div className="mb-5">
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200/60 p-4">
-                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">🎂 Hoy cumple{cumpleHoy.length > 1 ? "n" : ""} años</p>
-                  <div className="space-y-2.5">
-                    {cumpleHoy.map((p, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-sm font-bold shrink-0">
-                          {(p.nombre || "?")[0].toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900">{p.nombre}</p>
-                          <p className="text-xs text-amber-700">{p.funcion || "Dirección de Arbolado"}</p>
-                        </div>
-                        <span className="ml-auto text-lg">🎉</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Próximos cumpleaños */}
-            {cumpleProximos.length > 0 && (
-              <div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">🎉 Próximos cumpleaños</p>
-                <div className="space-y-2">
-                  {cumpleProximos.map((p, i) => {
-                    const info = cumpleLabel(p.diffDias, p.cumpleFecha);
-                    const diaSemana = DIAS_SEMANA[p.cumpleFecha.getDay()];
-                    return (
-                      <div key={i} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold shrink-0">
-                          {(p.nombre || "?")[0].toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-gray-900">{p.nombre}</p>
-                          <p className="text-xs text-gray-500">{p.funcion || "Dirección de Arbolado"}</p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className={`text-xs font-bold ${info.highlight ? "text-amber-700" : "text-emerald-700"}`}>{info.emoji} {info.text}</p>
-                          <p className="text-[10px] text-gray-400">{diaSemana}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          {alertas.length===0 ? (
+            <div className="px-5 py-6 text-center text-sm text-gray-400">✅ Sin pendientes urgentes</div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {alertas.map((a,i)=>(
+                <button key={i} onClick={()=>setPage(a.action)}
+                  className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left">
+                  <span className="text-base shrink-0">{a.icono}</span>
+                  <p className="text-sm text-gray-700 flex-1">{a.texto}</p>
+                  <span className="text-[10px] font-bold text-emerald-600 shrink-0">Ir →</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* ═══ STATS ═══ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        <StatCard label="Expedientes" value={data.expedientes.length} sub="Registrados" color="blue"/>
-        <StatCard label="Patrimonio Vegetal" value={data.expedientes.filter(e=>esAsuntoPatrimonioVegetal(e.asunto)).length} sub="Expedientes vinculados" color="green"/>
-        <StatCard label="Compras pend." value={pendC} sub={`${data.compras.length} totales`} color="yellow"/>
-        <StatCard label="Saldo Caja Chica" value={fmtMoney(saldo)} sub={`Presup: ${fmtMoney(data.cajaChica.presupuesto)}`} color={saldo<0?"red":"green"}/>
-        <StatCard label="Tareas activas" value={tActivas} sub={`${data.tareas.filter(t=>t.estado==="en_proceso").length} en proceso`} color="purple"/>
-      </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        <StatCard label="Proveedores" value={data.proveedores.length} sub="Registrados" color="orange"/>
-        <StatCard label="Personal" value={(data.personal||[]).length} sub="Agentes registrados" color="purple"/>
-        <StatCard label="Gestión Arbolado" value={(data.gestionArbolado||[]).length} sub="Intervenciones totales" color="green"/>
-        <StatCard label="Resoluciones" value={data.resoluciones.length} sub="En archivo" color="blue"/>
-        <StatCard label="Descansos (mes)" value={descMes} sub={MESES[mes]} color="green"/>
-        <StatCard label="Entregas" value={data.entregas.length} sub="Materiales entregados" color="orange"/>
+      {/* ═══ KPIs PRINCIPALES ═══ */}
+      <div>
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Indicadores clave</h3>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiCard label="Expedientes" value={data.expedientes.length} sub="Total registrados" color="blue" icon="📄" onClick={()=>setPage("expedientes")}/>
+          <KpiCard label="Patrimonio Vegetal" value={pvCount} sub="Expedientes vinculados" color="green" icon="🌿" onClick={()=>setPage("patrimonioVegetal")}/>
+          <KpiCard label="Personal" value={(data.personal||[]).length} sub="Agentes registrados" color="purple" icon="👤" onClick={()=>setPage("personal")}/>
+          <div className="bg-white rounded-xl border border-gray-100 border-l-4 border-l-emerald-500 p-4 shadow-sm cursor-pointer hover:shadow-md transition-all" onClick={()=>setPage("cajaChica")}>
+            <div className="flex items-start justify-between mb-1">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Caja Chica</p>
+              <span className="text-base opacity-60">💳</span>
+            </div>
+            <p className={`text-xl font-bold ${saldo<0?"text-rose-600":"text-gray-900"}`}>{fmtMoney(saldo)}</p>
+            <p className="text-xs text-gray-500 mt-1">Saldo disponible</p>
+            <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-700 ${pctCaja>90?"bg-rose-500":pctCaja>70?"bg-amber-500":"bg-emerald-500"}`} style={{width:`${pctCaja}%`}}/>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-1">{Math.round(pctCaja)}% utilizado de {fmtMoney(presupuesto)}</p>
+          </div>
+        </div>
       </div>
 
-      {/* ═══ ACTIVIDAD RECIENTE ═══ */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-          <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900 text-sm">Últimos expedientes</h3>
-            <button onClick={()=>setPage("expedientes")} className="text-xs font-medium text-emerald-600 hover:text-emerald-700">Ver todos →</button>
+      {/* ═══ SEGUNDA FILA DE KPIs ═══ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Compras pend." value={pendC} sub={`${data.compras.length} totales`} color="yellow" icon="🛒" onClick={()=>setPage("compras")}/>
+        <KpiCard label="Tareas activas" value={tActivas} sub={`${data.tareas.filter(t=>t.estado==="en_proceso").length} en proceso`} color="purple" icon="✅" onClick={()=>setPage("tareas")}/>
+        <KpiCard label="Proveedores" value={data.proveedores.length} sub="Registrados" color="orange" icon="🏢" onClick={()=>setPage("proveedores")}/>
+        <KpiCard label="Resoluciones" value={data.resoluciones.length} sub="En archivo" color="blue" icon="📋" onClick={()=>setPage("resoluciones")}/>
+      </div>
+
+      {/* ═══ INTERVENCIONES DEL MES ═══ */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs">🌳</span>
+            <h3 className="font-bold text-gray-900 text-sm">Gestión del Arbolado</h3>
+            <span className="text-xs text-gray-400">{totalGestion} intervenciones</span>
           </div>
-          <div className="divide-y divide-gray-50">
-            {data.expedientes.length===0 ? <p className="px-5 py-6 text-sm text-gray-400 text-center">Sin expedientes</p>
-            : data.expedientes.slice(-5).reverse().map(e => (
-              <div key={e.id} className="px-5 py-3 flex items-center justify-between">
-                <div><p className="text-sm font-medium text-gray-900">{e.numero}</p><p className="text-xs text-gray-500">{e.causante}</p></div>
-                <span className="text-xs text-gray-400">{fmtDate(e.fechaIngreso)}</span>
-              </div>
+          <div className="flex gap-1 sm:ml-auto bg-gray-100 rounded-lg p-0.5">
+            {[["7","7 días"],["30","30 días"],["90","3 meses"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setFiltroGestion(v)}
+                className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition-colors ${filtroGestion===v?"bg-white text-gray-900 shadow-sm":"text-gray-500"}`}>{l}</button>
             ))}
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-          <div className="px-5 py-3.5 border-b border-gray-50 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900 text-sm">Tareas pendientes</h3>
+        <div className="p-5">
+          {totalGestion===0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">Sin intervenciones en el período</p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {gestionData.map(g=>{
+                const colors={podas:"bg-emerald-500",extracciones:"bg-rose-500",plantaciones:"bg-sky-500",tocones:"bg-amber-500"};
+                const icons={podas:"✂️",extracciones:"🪚",plantaciones:"🌱",tocones:"🪵"};
+                return (
+                  <button key={g.tipo} onClick={()=>setPage(g.tipo)}
+                    className="bg-gray-50 rounded-xl p-4 text-center hover:bg-gray-100 transition-colors group">
+                    <span className="text-2xl block mb-1">{icons[g.tipo]}</span>
+                    <p className="text-2xl font-bold text-gray-900 tabular-nums">{g.count}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{g.label}</p>
+                    <div className="mt-2 h-1 bg-gray-200 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${colors[g.tipo]} transition-all duration-700`}
+                        style={{width:totalGestion>0?`${Math.round((g.count/totalGestion)*100)}%`:"0%"}}/>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ FILA INFERIOR: ACTIVIDAD + TAREAS ═══ */}
+      <div className="grid lg:grid-cols-2 gap-4">
+
+        {/* Timeline de actividad reciente */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center text-xs">🕐</span>
+            <h3 className="font-bold text-gray-900 text-sm">Actividad reciente</h3>
+          </div>
+          {timeline.length===0 ? (
+            <p className="px-5 py-6 text-sm text-gray-400 text-center">Sin actividad registrada</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {timeline.map((item,i)=>(
+                <button key={item.id+i} onClick={()=>setPage(item.action)}
+                  className="w-full px-5 py-3 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${timelineColor[item.color]||timelineColor.blue}`}>
+                    {item.icono}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">{item.texto}</p>
+                    <p className="text-xs text-gray-500 truncate">{item.sub}</p>
+                  </div>
+                  <span className="text-[11px] text-gray-400 shrink-0">{fmtDate(item.fecha)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Tareas pendientes */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center text-xs">✅</span>
+              <h3 className="font-bold text-gray-900 text-sm">Tareas pendientes</h3>
+            </div>
             <button onClick={()=>setPage("tareas")} className="text-xs font-medium text-emerald-600 hover:text-emerald-700">Ver todas →</button>
           </div>
-          <div className="divide-y divide-gray-50">
-            {data.tareas.filter(t=>t.estado!=="realizada").length===0 ? <p className="px-5 py-6 text-sm text-gray-400 text-center">Sin tareas pendientes</p>
-            : data.tareas.filter(t=>t.estado!=="realizada").slice(0,5).map(t => (
-              <div key={t.id} className="px-5 py-3 flex items-center justify-between">
-                <div><p className="text-sm font-medium text-gray-900">{t.descripcion}</p><p className="text-xs text-gray-500">{t.encargado}</p></div>
-                <Badge label={t.estado==="por_hacer"?"Pendiente":"En proceso"} color={t.estado==="por_hacer"?"yellow":"blue"}/>
-              </div>
-            ))}
-          </div>
+          {data.tareas.filter(t=>t.estado!=="realizada").length===0 ? (
+            <p className="px-5 py-6 text-sm text-gray-400 text-center">Sin tareas pendientes</p>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {data.tareas.filter(t=>t.estado!=="realizada").slice(0,6).map(t=>(
+                <div key={t.id} className="px-5 py-3 flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${t.prioridad==="alta"?"bg-rose-400":t.prioridad==="media"?"bg-amber-400":"bg-gray-300"}`}/>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-gray-900 truncate">{t.descripcion}</p>
+                    <p className="text-xs text-gray-500">{t.encargado}</p>
+                  </div>
+                  <Badge label={t.estado==="por_hacer"?"Pendiente":"En proceso"} color={t.estado==="por_hacer"?"yellow":"blue"}/>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -194,6 +194,9 @@ const I = {
   plantacion: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 22V12"/><path d="M8 18l4-4 4 4"/><path d="M6 14l6-6 6 6"/><circle cx="12" cy="6" r="2"/></svg>,
   tocon: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="7" y="10" width="10" height="9" rx="1"/><ellipse cx="12" cy="10" rx="5" ry="2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>,
   inventario: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>,
+  cuadrilla: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="19" cy="7" r="0"/></svg>,
+  parte: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="7" y1="15" x2="13" y2="15"/><line x1="7" y1="18" x2="17" y2="18"/></svg>,
+  duplicate: <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>,
 };
 
 // ─── Helpers ───
@@ -215,17 +218,18 @@ const esResolucionCompensatorio = (r) => (r.tipoResolucion || "") === "compensat
 
 const defaultState = {
   expedientes: [], compras: [], cajaChica: { presupuesto: 0, registros: [] },
-  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [], personal: [], gestionArbolado: [], inventario: [],
+  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [], personal: [], gestionArbolado: [], inventario: [], cuadrillas: [], partesTrabajo: [],
 };
 
 async function loadData() {
   try {
-    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado, inventario] = await Promise.all([
+    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado, inventario, cuadrillas, partesTrabajo] = await Promise.all([
       sbList("expedientes"), sbList("patrimonio_vegetal"), sbList("compras"), sbList("caja_chica_registros"),
       sbGetPresupuesto(), sbList("tareas"), sbList("descansos"), sbList("licencias"), sbList("resoluciones"),
       sbList("proveedores"), sbList("entregas"), sbList("notas"), sbList("personal"), sbList("gestion_arbolado"), sbList("inventario"),
+      sbList("cuadrillas"), sbList("partes_trabajo"),
     ]);
-    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado, inventario };
+    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado, inventario, cuadrillas, partesTrabajo };
   } catch (e) { console.error(e); return defaultState; }
 }
 
@@ -514,6 +518,10 @@ export default function App() {
       { id:"descansos", label:"Descansos Comp.", icon: I.descanso },
       { id:"licencias", label:"Licencias", icon: I.licencia },
     ]},
+    { heading: "Partes de Trabajo", items: [
+      { id:"cuadrillas", label:"Cuadrillas", icon: I.cuadrilla },
+      { id:"partesTrabajo", label:"Partes del Día", icon: I.parte },
+    ]},
     { heading: "Operaciones", items: [
       { id:"tareas", label:"Tareas", icon: I.tareas },
       { id:"entregas", label:"Entrega de Materiales", icon: I.entregas },
@@ -600,6 +608,8 @@ export default function App() {
           {page==="entregas" && <EntregasPage data={data} up={up}/>}
           {page==="notas" && <NotasPage data={data} up={up}/>}
           {page==="inventario" && <InventarioPage data={data} up={up}/>}
+          {page==="cuadrillas" && <CuadrillasPage data={data} up={up}/>}
+          {page==="partesTrabajo" && <PartesTrabajoPage data={data} up={up}/>}
         </div>
       </main>
     </div>
@@ -3343,6 +3353,514 @@ tr:nth-child(even) td{background:#fafafa}
       </Modal>
 
       <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este bien"/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════
+// PARTES DE TRABAJO — helpers de generación fiel al modelo
+// ═══════════════════════════════
+const TURNOS_HORARIO = {
+  manana: { label:"Mañana", desde:"08:00", hasta:"13:00" },
+  tarde:  { label:"Tarde",  desde:"13:00", hasta:"18:00" },
+};
+
+// Genera el texto de "LUGAR DE TRABAJO" a partir de los reclamos, replicando el formato del modelo:
+// "Reclamo N.º XXXXX: Causante – Domicilio. **Especie.** Trabajo: tipo. [Observaciones]"
+function generarLugarTrabajo(reclamos) {
+  return (reclamos||[]).filter(r=>r.numero||r.causante).map(r => {
+    let linea = `Reclamo N.º ${r.numero||"—"}: ${r.causante||""} – ${r.domicilio||""}. `;
+    if (r.especie) linea += `**${r.especie}.** `;
+    if (r.trabajo) linea += `Trabajo: ${r.trabajo}.`;
+    if (r.observaciones) linea += ` ${r.observaciones}`;
+    return linea.trim();
+  }).join("\n");
+}
+
+// Convierte **negrita** markdown simple a <strong> para el HTML del documento
+const mdBoldToHtml = (txt) => (txt||"").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+
+const generarParteHtml = (parte) => {
+  const turnoInfo = TURNOS_HORARIO[parte.turno] || TURNOS_HORARIO.manana;
+  const desde = parte.horarioDesde || turnoInfo.desde;
+  const hasta = parte.horarioHasta || turnoInfo.hasta;
+  const fechaDoc = fmtDate(parte.fecha || hoy());
+  const integrantes = parte.integrantes || [];
+  const reclamos = parte.reclamos || [];
+  const lugarTexto = parte.lugarTrabajo || generarLugarTrabajo(reclamos);
+  const bullets = lugarTexto.split("\n").filter(l=>l.trim()).map(l =>
+    `<li>${mdBoldToHtml(l)}</li>`
+  ).join("");
+
+  const filasIntegrantes = integrantes.map(i => `
+    <tr><td>${i.af||""}</td><td>${i.nombre||""}</td><td></td></tr>
+  `).join("") + `<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`;
+
+  return `
+<div class="parte-page">
+  ${membrete()}
+  <p class="parte-subtitulo">MUNICIPALIDAD DE SAN MIGUEL DE TUCUMAN<br/>DIRECCION DE ARBOLADO</p>
+  <p class="parte-fecha">San Miguel de Tucumán ${fechaDoc}</p>
+
+  <div class="parte-cols">
+    <div class="parte-col-izq">
+      <p class="parte-horario">Horario de Trabajo de Turno ${turnoInfo.label}: ${desde} a ${hasta} hs</p>
+      <table class="parte-equipo">
+        <thead>
+          <tr><th colspan="3">EQUIPO DE TRABAJO N° ${parte.numeroEquipo||parte.numeroCuadrilla||""} - TURNO ${turnoInfo.label.toUpperCase()}</th></tr>
+          <tr><th style="width:18%">AF</th><th>APELLIDO Y NOMBRE</th><th style="width:22%">FIRMA</th></tr>
+        </thead>
+        <tbody>${filasIntegrantes}</tbody>
+      </table>
+    </div>
+    <div class="parte-col-der">
+      <p class="parte-orden-titulo">Orden de Trabajo</p>
+      <div class="parte-lugar-box">
+        <p class="parte-lugar-titulo">LUGAR DE TRABAJO</p>
+        <ul class="parte-lugar-lista">${bullets || "<li>Sin reclamos cargados.</li>"}</ul>
+      </div>
+    </div>
+  </div>
+
+  <p class="parte-firma">FIRMA DIRECTOR</p>
+</div>`;
+};
+
+const generarTablaOperativaHtml = () => `
+<table class="parte-operativa">
+  <thead><tr>
+    <th>PATENTE GRUA</th><th>DIRECCION</th><th>SALIDA GRUA</th><th>LLEGADA DESTINO</th>
+    <th>TRABAJO REALIZAR</th><th>ESPECIE</th><th>TRABAJO TERMINADO</th><th>OBSERVACIONES</th>
+  </tr></thead>
+  <tbody>
+    ${Array.from({length:6}).map(()=>`<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join("")}
+  </tbody>
+</table>`;
+
+const estiloParte = () => `
+<style>
+@media print { .no-print { display:none !important; } @page { size:A4; margin:1.3cm; } }
+* { box-sizing:border-box; }
+body { font-family:'Times New Roman',Times,serif; font-size:10.5pt; color:#111; margin:0; }
+.parte-page { max-width:900px; margin:0 auto; padding:14px; page-break-after: always; }
+.parte-page:last-child { page-break-after: auto; }
+.membrete { margin-bottom:4px; padding-bottom:6px; border-bottom:none; }
+.membrete-img { max-height:58px; }
+.parte-subtitulo { text-align:center; font-style:italic; font-size:9.5pt; line-height:1.3; margin:2px 0 6px; }
+.parte-fecha { text-align:right; font-weight:bold; font-size:10.5pt; margin-bottom:10px; }
+.parte-cols { display:flex; gap:16px; align-items:flex-start; }
+.parte-col-izq { flex:0 0 42%; }
+.parte-col-der { flex:1; }
+.parte-horario { font-weight:bold; text-decoration:underline; font-size:10pt; margin-bottom:6px; }
+table.parte-equipo { width:100%; border-collapse:collapse; font-size:9pt; }
+table.parte-equipo th, table.parte-equipo td { border:1px solid #333; padding:3px 6px; }
+table.parte-equipo thead tr:first-child th { text-align:center; font-weight:bold; text-transform:uppercase; font-size:8.8pt; background:#fafafa; }
+table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold; background:#f0f0f0; font-size:8.5pt; }
+.parte-orden-titulo { text-align:center; font-weight:bold; text-decoration:underline; font-size:10pt; margin-bottom:6px; }
+.parte-lugar-box { border:1px solid #333; padding:8px 10px; font-size:9pt; }
+.parte-lugar-titulo { text-align:center; font-weight:bold; text-decoration:underline; margin:0 0 6px; font-size:9.5pt; }
+.parte-lugar-lista { margin:0; padding-left:16px; line-height:1.45; }
+.parte-lugar-lista li { margin-bottom:6px; text-align:justify; }
+.parte-firma { text-align:right; font-weight:bold; margin-top:50px; font-size:10pt; }
+table.parte-operativa { width:100%; border-collapse:collapse; font-size:8.5pt; margin-top:14px; }
+table.parte-operativa th, table.parte-operativa td { border:1px solid #333; padding:5px 6px; text-align:left; }
+table.parte-operativa th { background:#f0f0f0; font-weight:bold; text-transform:uppercase; font-size:8pt; }
+table.parte-operativa td { height:26px; }
+.btn-bar { display:flex; gap:10px; justify-content:center; margin:16px 0; }
+.btn { padding:10px 28px; border:none; border-radius:8px; font-size:13px; cursor:pointer; font-weight:600; }
+.btn-print { background:#16a34a; color:white; }
+.btn-word { background:#1d4ed8; color:white; }
+tr, .parte-lugar-lista li { page-break-inside: avoid; }
+</style>`;
+
+const abrirVentanaParte = (parte, incluirOperativa) => {
+  const w = window.open("","_blank","width=960,height=760");
+  if (!w) return;
+  const html = generarParteHtml(parte) + (incluirOperativa ? generarTablaOperativaHtml() : "");
+  const nombreArchivo = `Parte_${(parte.fecha||hoy()).replace(/-/g,"")}_Cuadrilla${parte.numeroCuadrilla||""}`;
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Parte de Trabajo</title>${estiloParte()}</head><body>
+<div class="btn-bar no-print">
+  <button class="btn btn-print" onclick="window.print()">Imprimir</button>
+  <button class="btn btn-word" onclick="descargarWordParte()">Descargar Word</button>
+</div>
+${html}
+<script>
+function descargarWordParte(){
+  const cuerpo = document.body.innerHTML.replace(/<div class="btn-bar no-print">[\\s\\S]*?<\\/div>/,'');
+  const full = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8">${estiloParte().replace(/<\/?style>/g,'').replace(/\n/g,' ')}</head><body>'+cuerpo+'</body></html>';
+  const blob = new Blob(['\\ufeff'+full], {type:'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = '${nombreArchivo}.doc';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+</script>
+</body></html>`);
+  w.document.close();
+};
+
+// ═══════════════════════════════
+// CUADRILLAS
+// ═══════════════════════════════
+function CuadrillasPage({ data, up }) {
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [del, setDel] = useState(null);
+  const emptyIntegrante = { af:"", nombre:"" };
+  const empty = { numero:"", numeroEquipo:"", turno:"manana", estado:"activa", integrantes:[{...emptyIntegrante}] };
+  const [form, setForm] = useState(empty);
+
+  const cuadrillas = useMemo(()=>[...(data.cuadrillas||[])].sort((a,b)=>(parseInt(a.numero)||0)-(parseInt(b.numero)||0)),[data.cuadrillas]);
+
+  const openNew = () => { setForm({...empty}); setEditing(null); setModal(true); };
+  const openEdit = (c) => { setForm({...empty, ...c}); setEditing(c.id); setModal(true); };
+  const save = () => {
+    if (!form.numero.trim()) return;
+    const id = editing || uid();
+    const reg = {...form, numeroEquipo: form.numeroEquipo || form.numero, integrantes:(form.integrantes||[]).filter(i=>i.af||i.nombre)};
+    up(p => ({...p, cuadrillas: editing ? (p.cuadrillas||[]).map(c=>c.id===editing?{...reg,id}:c) : [...(p.cuadrillas||[]),{...reg,id}]}));
+    (editing ? sbUpdate("cuadrillas", id, reg) : sbInsert("cuadrillas", id, reg));
+    setModal(false);
+  };
+  const remove = () => { up(p=>({...p, cuadrillas:(p.cuadrillas||[]).filter(c=>c.id!==del)})); sbDelete("cuadrillas", del); setDel(null); };
+  const toggleEstado = (c) => {
+    const nuevoEstado = c.estado==="activa" ? "inactiva" : "activa";
+    const reg = {...c, estado:nuevoEstado};
+    up(p=>({...p, cuadrillas:(p.cuadrillas||[]).map(x=>x.id===c.id?reg:x)}));
+    sbUpdate("cuadrillas", c.id, reg);
+  };
+  const f = (k,v) => setForm(p=>({...p,[k]:v}));
+  const setIntegrante = (i,k,v) => setForm(p=>{ const arr=[...p.integrantes]; arr[i]={...arr[i],[k]:v}; return {...p,integrantes:arr}; });
+  const addIntegrante = () => setForm(p=>({...p,integrantes:[...p.integrantes,{...emptyIntegrante}]}));
+  const removeIntegrante = (i) => setForm(p=>({...p,integrantes:p.integrantes.filter((_,idx)=>idx!==i)}));
+
+  return (
+    <div>
+      <PageHeader title="Cuadrillas" sub="Administración de equipos de trabajo — Dirección de Arbolado"><BtnNew onClick={openNew} label="Nueva cuadrilla"/></PageHeader>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {cuadrillas.length===0 && (
+          <div className="col-span-full bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+            <p className="text-sm text-gray-400">Sin cuadrillas registradas. Hacé clic en "Nueva cuadrilla" para crear las 6 equipos.</p>
+          </div>
+        )}
+        {cuadrillas.map(c => (
+          <div key={c.id} className={`bg-white rounded-xl border shadow-sm p-4 ${c.estado==="activa"?"border-gray-100":"border-gray-100 opacity-60"}`}>
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <h4 className="font-bold text-gray-900 text-sm">Cuadrilla N° {c.numero}</h4>
+                <p className="text-xs text-gray-500">Equipo N° {c.numeroEquipo||c.numero} · Turno {TURNOS_HORARIO[c.turno]?.label||c.turno}</p>
+              </div>
+              <Badge label={c.estado==="activa"?"Activa":"Inactiva"} color={c.estado==="activa"?"green":"gray"}/>
+            </div>
+            <div className="text-xs text-gray-600 mb-3">
+              {(c.integrantes||[]).length===0 ? <span className="text-gray-400">Sin integrantes cargados</span> : (
+                <ul className="space-y-0.5">
+                  {(c.integrantes||[]).map((i,idx)=>(<li key={idx}>· {i.af} — {i.nombre}</li>))}
+                </ul>
+              )}
+            </div>
+            <div className="flex gap-2 pt-2 border-t border-gray-50">
+              <button onClick={()=>openEdit(c)} className="flex-1 text-xs font-semibold text-gray-600 bg-gray-50 rounded-lg py-1.5 hover:bg-gray-100 transition-colors">Editar</button>
+              <button onClick={()=>toggleEstado(c)} className="flex-1 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg py-1.5 hover:bg-blue-100 transition-colors">{c.estado==="activa"?"Desactivar":"Activar"}</button>
+              <button onClick={()=>setDel(c.id)} className="px-2.5 text-xs font-semibold text-rose-500 bg-rose-50 rounded-lg py-1.5 hover:bg-rose-100 transition-colors">{I.trash}</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar cuadrilla":"Nueva cuadrilla"} wide>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <Field label="N° de Cuadrilla"><input className={inp} value={form.numero} onChange={e=>f("numero",e.target.value)} placeholder="1 a 6"/></Field>
+          <Field label="N° de Equipo"><input className={inp} value={form.numeroEquipo} onChange={e=>f("numeroEquipo",e.target.value)} placeholder="Igual al de cuadrilla por defecto"/></Field>
+          <Field label="Turno">
+            <select className={sel} value={form.turno} onChange={e=>f("turno",e.target.value)}>
+              <option value="manana">Mañana (08:00 a 13:00)</option>
+              <option value="tarde">Tarde (13:00 a 18:00)</option>
+            </select>
+          </Field>
+          <Field label="Estado">
+            <select className={sel} value={form.estado} onChange={e=>f("estado",e.target.value)}>
+              <option value="activa">Activa</option>
+              <option value="inactiva">Inactiva</option>
+            </select>
+          </Field>
+        </div>
+        <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="bg-gray-50 px-4 py-2.5 flex items-center justify-between border-b border-gray-200">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Integrantes (AF y Nombre)</p>
+            <button onClick={addIntegrante} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700">{I.plus} Agregar integrante</button>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {form.integrantes.map((i,idx)=>(
+              <div key={idx} className="px-4 py-2.5 grid grid-cols-12 gap-2 items-end">
+                <div className="col-span-3"><input className={inp} value={i.af} onChange={e=>setIntegrante(idx,"af",e.target.value)} placeholder="N° AF"/></div>
+                <div className="col-span-8"><input className={inp} value={i.nombre} onChange={e=>setIntegrante(idx,"nombre",e.target.value)} placeholder="Apellido y Nombre"/></div>
+                <div className="col-span-1 flex justify-end">{form.integrantes.length>1 && <button onClick={()=>removeIntegrante(idx)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-300 hover:text-rose-400">{I.trash}</button>}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
+      </Modal>
+      <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="esta cuadrilla"/>
+    </div>
+  );
+}
+
+// ═══════════════════════════════
+// PARTES DEL DÍA
+// ═══════════════════════════════
+const PARTE_ESTADOS = {
+  borrador:  { l:"Borrador",  c:"gray"   },
+  generado:  { l:"Generado",  c:"blue"   },
+  impreso:   { l:"Impreso",   c:"purple" },
+  finalizado:{ l:"Finalizado",c:"green"  },
+};
+
+function PartesTrabajoPage({ data, up }) {
+  const [filtroFecha, setFiltroFecha] = useState(hoy());
+  const [filtroCuadrilla, setFiltroCuadrilla] = useState("todas");
+  const [filtroTurno, setFiltroTurno] = useState("todos");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [busquedaReclamo, setBusquedaReclamo] = useState("");
+  const [modal, setModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [del, setDel] = useState(null);
+
+  const emptyReclamo = { numero:"", causante:"", domicilio:"", especie:"", trabajo:"", observaciones:"" };
+  const emptyForm = { fecha:hoy(), cuadrillaId:"", numeroCuadrilla:"", numeroEquipo:"", turno:"manana", horarioDesde:"", horarioHasta:"", integrantes:[], reclamos:[{...emptyReclamo}], lugarTrabajo:"", estado:"borrador" };
+  const [form, setForm] = useState(emptyForm);
+  const [lugarManual, setLugarManual] = useState(false); // si el usuario edita el texto a mano, dejamos de auto-generar
+
+  const cuadrillasActivas = useMemo(()=>(data.cuadrillas||[]).filter(c=>c.estado==="activa"),[data.cuadrillas]);
+
+  const partes = data.partesTrabajo || [];
+
+  const list = useMemo(() => {
+    return [...partes].reverse().filter(p => {
+      const mF = !filtroFecha || p.fecha === filtroFecha;
+      const mC = filtroCuadrilla==="todas" || String(p.numeroCuadrilla)===filtroCuadrilla;
+      const mT = filtroTurno==="todos" || p.turno===filtroTurno;
+      const mE = filtroEstado==="todos" || p.estado===filtroEstado;
+      const mR = !busquedaReclamo || (p.reclamos||[]).some(r => (r.numero||"").includes(busquedaReclamo) || (r.causante||"").toLowerCase().includes(busquedaReclamo.toLowerCase()));
+      return mF && mC && mT && mE && mR;
+    });
+  }, [partes, filtroFecha, filtroCuadrilla, filtroTurno, filtroEstado, busquedaReclamo]);
+
+  // Sugerencias de reclamos existentes en Gestión del Arbolado (sin duplicar, solo para autocompletar)
+  const sugerenciasReclamos = useMemo(() => (data.gestionArbolado||[]).map(g => ({
+    numero: g.numeroReclamo||"", causante:"", domicilio: g.domicilio||"", especie:"", trabajo:"", tipo:g.tipo,
+  })), [data.gestionArbolado]);
+
+  const openNew = () => { setForm({...emptyForm, fecha:hoy()}); setLugarManual(false); setEditing(null); setModal(true); };
+  const openEdit = (p) => { setForm({...emptyForm, ...p}); setLugarManual(!!p.lugarTrabajo); setEditing(p.id); setModal(true); };
+  const openDuplicar = (p) => {
+    const { id, ...resto } = p;
+    setForm({...emptyForm, ...resto, fecha:hoy(), estado:"borrador"});
+    setLugarManual(!!p.lugarTrabajo);
+    setEditing(null);
+    setModal(true);
+  };
+
+  const onSelectCuadrilla = (cuadrillaId) => {
+    const c = (data.cuadrillas||[]).find(x=>x.id===cuadrillaId);
+    if (!c) { setForm(p=>({...p, cuadrillaId:"", numeroCuadrilla:"", numeroEquipo:"", integrantes:[]})); return; }
+    setForm(p=>({...p, cuadrillaId, numeroCuadrilla:c.numero, numeroEquipo:c.numeroEquipo||c.numero, turno:c.turno, integrantes:c.integrantes||[]}));
+  };
+
+  const f = (k,v) => setForm(p=>({...p,[k]:v}));
+  const setReclamo = (i,k,v) => setForm(p=>{ const arr=[...p.reclamos]; arr[i]={...arr[i],[k]:v}; return {...p,reclamos:arr}; });
+  const addReclamo = () => setForm(p=>({...p,reclamos:[...p.reclamos,{...emptyReclamo}]}));
+  const removeReclamo = (i) => setForm(p=>({...p,reclamos:p.reclamos.filter((_,idx)=>idx!==i)}));
+
+  // Auto-generar lugarTrabajo mientras el usuario no lo edite manualmente
+  const lugarTrabajoTexto = lugarManual ? form.lugarTrabajo : generarLugarTrabajo(form.reclamos);
+
+  const save = (nuevoEstado) => {
+    if (!form.numeroCuadrilla) return;
+    const id = editing || uid();
+    const reg = {
+      ...form,
+      reclamos: form.reclamos.filter(r=>r.numero||r.causante),
+      lugarTrabajo: lugarTrabajoTexto,
+      estado: nuevoEstado || form.estado || "borrador",
+    };
+    up(p => ({...p, partesTrabajo: editing ? (p.partesTrabajo||[]).map(x=>x.id===editing?{...reg,id}:x) : [...(p.partesTrabajo||[]),{...reg,id}]}));
+    (editing ? sbUpdate("partes_trabajo", id, reg) : sbInsert("partes_trabajo", id, reg));
+    return {...reg, id};
+  };
+
+  const handleGuardar = () => { save(); setModal(false); };
+  const handleGenerarPDF = () => { const p = save("generado"); if(p) { abrirVentanaParte(p, true); setModal(false); } };
+  const handleImprimir = (p) => {
+    abrirVentanaParte(p, true);
+    if (p.estado !== "finalizado") {
+      const reg = {...p, estado:"impreso"};
+      up(prev=>({...prev, partesTrabajo:(prev.partesTrabajo||[]).map(x=>x.id===p.id?reg:x)}));
+      sbUpdate("partes_trabajo", p.id, reg);
+    }
+  };
+  const handleFinalizar = (p) => {
+    const reg = {...p, estado:"finalizado"};
+    up(prev=>({...prev, partesTrabajo:(prev.partesTrabajo||[]).map(x=>x.id===p.id?reg:x)}));
+    sbUpdate("partes_trabajo", p.id, reg);
+  };
+  const remove = () => { up(p=>({...p, partesTrabajo:(p.partesTrabajo||[]).filter(x=>x.id!==del)})); sbDelete("partes_trabajo", del); setDel(null); };
+
+  const printIcon = I.print;
+
+  // Agrupar por turno para la vista de listado
+  const agrupados = useMemo(() => {
+    const grupos = { manana: [], tarde: [] };
+    list.forEach(p => { (grupos[p.turno]||(grupos[p.turno]=[])).push(p); });
+    return grupos;
+  }, [list]);
+
+  return (
+    <div>
+      <PageHeader title="Partes del Día" sub="Digitalización de partes de trabajo diarios"><BtnNew onClick={openNew} label="Nuevo parte"/></PageHeader>
+
+      {/* Filtros */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-5">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <Field label="Fecha"><input type="date" className={inp} value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)}/></Field>
+          <Field label="Cuadrilla">
+            <select className={sel} value={filtroCuadrilla} onChange={e=>setFiltroCuadrilla(e.target.value)}>
+              <option value="todas">Todas</option>
+              {(data.cuadrillas||[]).map(c=><option key={c.id} value={c.numero}>Cuadrilla {c.numero}</option>)}
+            </select>
+          </Field>
+          <Field label="Turno">
+            <select className={sel} value={filtroTurno} onChange={e=>setFiltroTurno(e.target.value)}>
+              <option value="todos">Todos</option>
+              <option value="manana">Mañana</option>
+              <option value="tarde">Tarde</option>
+            </select>
+          </Field>
+          <Field label="Estado">
+            <select className={sel} value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)}>
+              <option value="todos">Todos</option>
+              {Object.entries(PARTE_ESTADOS).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+            </select>
+          </Field>
+          <Field label="Buscar reclamo"><input className={inp} value={busquedaReclamo} onChange={e=>setBusquedaReclamo(e.target.value)} placeholder="N° o causante"/></Field>
+        </div>
+      </div>
+
+      {/* Listado agrupado por turno */}
+      {list.length===0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+          <p className="text-sm text-gray-400">Sin partes para los filtros seleccionados.</p>
+        </div>
+      ) : (
+        ["manana","tarde"].map(turno => agrupados[turno]?.length>0 && (
+          <div key={turno} className="mb-6">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Turno {TURNOS_HORARIO[turno].label}</h3>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"><div className="overflow-x-auto">
+              <table className="w-full text-sm"><thead><tr className="border-b border-gray-100 bg-gray-50/50">
+                <TH>Fecha</TH><TH>Cuadrilla</TH><TH className="hidden sm:table-cell">Reclamos</TH><TH className="text-center">Estado</TH><TH className="text-right">Acciones</TH>
+              </tr></thead><tbody className="divide-y divide-gray-50">
+                {agrupados[turno].map(p => (
+                  <tr key={p.id} className="hover:bg-gray-50/50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{fmtDate(p.fecha)}</td>
+                    <td className="px-4 py-3 text-gray-700">Cuadrilla {p.numeroCuadrilla} (Equipo {p.numeroEquipo})</td>
+                    <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{(p.reclamos||[]).length} reclamo{(p.reclamos||[]).length!==1?"s":""}</td>
+                    <td className="px-4 py-3 text-center"><Badge label={PARTE_ESTADOS[p.estado]?.l||p.estado} color={PARTE_ESTADOS[p.estado]?.c||"gray"}/></td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-0.5 flex-wrap">
+                        <button onClick={()=>handleImprimir(p)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="PDF / Imprimir">{printIcon}</button>
+                        <button onClick={()=>openEdit(p)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Editar">{I.edit}</button>
+                        <button onClick={()=>openDuplicar(p)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Duplicar">{I.duplicate}</button>
+                        {p.estado!=="finalizado" && <button onClick={()=>handleFinalizar(p)} className="px-2 py-1 rounded-lg hover:bg-emerald-50 text-[10px] font-bold text-emerald-600 bg-emerald-50/50 transition-colors" title="Marcar finalizado">Finalizar</button>}
+                        <button onClick={()=>setDel(p.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors" title="Eliminar">{I.trash}</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody></table>
+            </div></div>
+          </div>
+        ))
+      )}
+
+      {/* Modal Nuevo/Editar Parte */}
+      <Modal open={modal} onClose={()=>setModal(false)} title={editing?"Editar parte de trabajo":"Nuevo parte de trabajo"} wide>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <Field label="Fecha"><input type="date" className={inp} value={form.fecha} onChange={e=>f("fecha",e.target.value)}/></Field>
+          <Field label="Cuadrilla">
+            <select className={sel} value={form.cuadrillaId} onChange={e=>onSelectCuadrilla(e.target.value)}>
+              <option value="">Seleccionar cuadrilla...</option>
+              {cuadrillasActivas.map(c=><option key={c.id} value={c.id}>Cuadrilla {c.numero} — Turno {TURNOS_HORARIO[c.turno]?.label}</option>)}
+            </select>
+          </Field>
+        </div>
+
+        {form.cuadrillaId && (
+          <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-xl">
+            <div><p className="text-[11px] font-semibold text-gray-400 uppercase">Turno</p><p className="text-sm font-medium text-gray-800">{TURNOS_HORARIO[form.turno]?.label}</p></div>
+            <div><p className="text-[11px] font-semibold text-gray-400 uppercase">Equipo N°</p><p className="text-sm font-medium text-gray-800">{form.numeroEquipo}</p></div>
+            <div><p className="text-[11px] font-semibold text-gray-400 uppercase">Integrantes</p><p className="text-sm font-medium text-gray-800">{(form.integrantes||[]).length}</p></div>
+          </div>
+        )}
+
+        {/* Reclamos */}
+        <div className="border border-gray-200 rounded-xl overflow-hidden mb-4">
+          <div className="bg-gray-50 px-4 py-2.5 flex items-center justify-between border-b border-gray-200">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wider">Reclamos</p>
+            <button onClick={addReclamo} className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 hover:text-emerald-700">{I.plus} Agregar reclamo</button>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {form.reclamos.map((r,i)=>(
+              <div key={i} className="px-4 py-3 grid grid-cols-12 gap-2">
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">N° Reclamo</label>
+                  <input className={inp} list="reclamos-sugeridos" value={r.numero} onChange={e=>{
+                    const val = e.target.value;
+                    setReclamo(i,"numero",val);
+                    const match = sugerenciasReclamos.find(s=>s.numero===val);
+                    if (match && !r.domicilio) setReclamo(i,"domicilio",match.domicilio);
+                  }} placeholder="N°"/>
+                </div>
+                <div className="col-span-3"><label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Causante</label><input className={inp} value={r.causante} onChange={e=>setReclamo(i,"causante",e.target.value)} placeholder="Nombre"/></div>
+                <div className="col-span-3"><label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Domicilio</label><input className={inp} value={r.domicilio} onChange={e=>setReclamo(i,"domicilio",e.target.value)} placeholder="Dirección"/></div>
+                <div className="col-span-2"><label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Especie</label><input className={inp} value={r.especie} onChange={e=>setReclamo(i,"especie",e.target.value)} placeholder="Ej: 1 lapacho"/></div>
+                <div className="col-span-2"><label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Trabajo</label><input className={inp} value={r.trabajo} onChange={e=>setReclamo(i,"trabajo",e.target.value)} placeholder="Ej: despeje, poda"/></div>
+                <div className="col-span-11"><label className="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Observaciones</label><input className={inp} value={r.observaciones} onChange={e=>setReclamo(i,"observaciones",e.target.value)} placeholder="Ej: Tiene ubicación"/></div>
+                <div className="col-span-1 flex items-end justify-end pb-1">{form.reclamos.length>1 && <button onClick={()=>removeReclamo(i)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-300 hover:text-rose-400">{I.trash}</button>}</div>
+              </div>
+            ))}
+          </div>
+          <datalist id="reclamos-sugeridos">{sugerenciasReclamos.map((s,i)=><option key={i} value={s.numero}/>)}</datalist>
+        </div>
+
+        {/* Vista previa editable del Lugar de Trabajo */}
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Vista previa — Lugar de Trabajo (editable)</span>
+            {lugarManual && <button onClick={()=>setLugarManual(false)} className="text-xs font-semibold text-emerald-600 hover:text-emerald-700">Regenerar automático</button>}
+          </div>
+          <textarea
+            className={inp+" resize-none font-mono text-xs"}
+            rows={5}
+            value={lugarTrabajoTexto}
+            onChange={e=>{ setLugarManual(true); f("lugarTrabajo", e.target.value); }}
+            placeholder="Se genera automáticamente a partir de los reclamos cargados arriba..."
+          />
+          <p className="text-[11px] text-gray-400 mt-1">Se completa solo desde los reclamos. Podés editarlo manualmente si hace falta ajustar el texto.</p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row justify-between gap-3 mt-6">
+          <div className="flex gap-2">
+            <button onClick={handleGenerarPDF} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors">{printIcon} Generar PDF</button>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={()=>setModal(false)} className="px-4 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Cancelar</button>
+            <button onClick={handleGuardar} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Guardar</button>
+          </div>
+        </div>
+      </Modal>
+      <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este parte"/>
     </div>
   );
 }

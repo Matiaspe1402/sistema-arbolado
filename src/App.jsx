@@ -193,6 +193,7 @@ const I = {
   extraccion: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
   plantacion: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M12 22V12"/><path d="M8 18l4-4 4 4"/><path d="M6 14l6-6 6 6"/><circle cx="12" cy="6" r="2"/></svg>,
   tocon: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="7" y="10" width="10" height="9" rx="1"/><ellipse cx="12" cy="10" rx="5" ry="2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>,
+  inventario: <svg width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>,
 };
 
 // ─── Helpers ───
@@ -214,17 +215,17 @@ const esResolucionCompensatorio = (r) => (r.tipoResolucion || "") === "compensat
 
 const defaultState = {
   expedientes: [], compras: [], cajaChica: { presupuesto: 0, registros: [] },
-  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [], personal: [], gestionArbolado: [],
+  tareas: [], descansos: [], licencias: [], resoluciones: [], proveedores: [], entregas: [], notas: [], patrimonioVegetal: [], personal: [], gestionArbolado: [], inventario: [],
 };
 
 async function loadData() {
   try {
-    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado] = await Promise.all([
+    const [expedientes, patrimonioVegetal, compras, registros, presupuesto, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado, inventario] = await Promise.all([
       sbList("expedientes"), sbList("patrimonio_vegetal"), sbList("compras"), sbList("caja_chica_registros"),
       sbGetPresupuesto(), sbList("tareas"), sbList("descansos"), sbList("licencias"), sbList("resoluciones"),
-      sbList("proveedores"), sbList("entregas"), sbList("notas"), sbList("personal"), sbList("gestion_arbolado"),
+      sbList("proveedores"), sbList("entregas"), sbList("notas"), sbList("personal"), sbList("gestion_arbolado"), sbList("inventario"),
     ]);
-    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado };
+    return { expedientes, patrimonioVegetal, compras, cajaChica: { presupuesto, registros }, tareas, descansos, licencias, resoluciones, proveedores, entregas, notas, personal, gestionArbolado, inventario };
   } catch (e) { console.error(e); return defaultState; }
 }
 
@@ -516,6 +517,7 @@ export default function App() {
     { heading: "Operaciones", items: [
       { id:"tareas", label:"Tareas", icon: I.tareas },
       { id:"entregas", label:"Entrega de Materiales", icon: I.entregas },
+      { id:"inventario", label:"Inventario", icon: I.inventario },
     ]},
   ];
   if (profile?.rol === "administrador") {
@@ -597,6 +599,7 @@ export default function App() {
           {page==="proveedores" && <ProveedoresPage data={data} up={up} setPage={setPage}/>}
           {page==="entregas" && <EntregasPage data={data} up={up}/>}
           {page==="notas" && <NotasPage data={data} up={up}/>}
+          {page==="inventario" && <InventarioPage data={data} up={up}/>}
         </div>
       </main>
     </div>
@@ -2989,6 +2992,357 @@ function UsuariosPage() {
           ))}
         </tbody></table>
       </div></div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════
+// INVENTARIO
+// ═══════════════════════════════
+const INV_CATEGORIAS = {
+  herramienta: "Herramienta",
+  maquinaria: "Maquinaria",
+  vehiculo: "Vehículo",
+  mobiliario: "Mobiliario",
+  informatica: "Informática",
+  comunicacion: "Comunicación",
+  seguridad: "Seguridad / EPP",
+  libreria: "Librería / Insumo",
+  otro: "Otro",
+};
+
+const INV_ESTADOS = {
+  disponible:    { l:"Disponible",       c:"green"  },
+  asignado:      { l:"Asignado",         c:"blue"   },
+  en_reparacion: { l:"En reparación",    c:"yellow" },
+  fuera_servicio:{ l:"Fuera de servicio",c:"orange" },
+  baja:          { l:"Baja",             c:"red"    },
+};
+
+function InventarioPage({ data, up }) {
+  const [search, setSearch]           = useState("");
+  const [filtroEstado, setFiltroEstado] = useState("todos");
+  const [filtroCategoria, setFiltroCategoria] = useState("todas");
+  const [modal, setModal]             = useState(false);  // "form" | "ficha"
+  const [editing, setEditing]         = useState(null);
+  const [del, setDel]                 = useState(null);
+  const [fichaItem, setFichaItem]     = useState(null);
+
+  const emptyForm = {
+    codigo:"", nombre:"", categoria:"herramienta", marca:"", modelo:"",
+    numeroSerie:"", estado:"disponible", ubicacion:"", asignado:"",
+    fechaAdquisicion:"", observaciones:"",
+  };
+  const [form, setForm] = useState(emptyForm);
+  const f = (k, v) => setForm(p => ({...p, [k]: v}));
+
+  const inv = data.inventario || [];
+
+  const list = useMemo(() => {
+    const q = search.toLowerCase();
+    return [...inv].reverse().filter(b => {
+      const matchQ = b.nombre?.toLowerCase().includes(q)
+        || b.codigo?.toLowerCase().includes(q)
+        || b.marca?.toLowerCase().includes(q)
+        || (b.asignado||"").toLowerCase().includes(q);
+      const matchE = filtroEstado    === "todos"  || b.estado    === filtroEstado;
+      const matchC = filtroCategoria === "todas"  || b.categoria === filtroCategoria;
+      return matchQ && matchE && matchC;
+    });
+  }, [inv, search, filtroEstado, filtroCategoria]);
+
+  // Stats
+  const stats = useMemo(() => {
+    const tot = inv.length;
+    const disp = inv.filter(b => b.estado === "disponible").length;
+    const asig = inv.filter(b => b.estado === "asignado").length;
+    const rep  = inv.filter(b => b.estado === "en_reparacion").length;
+    return { tot, disp, asig, rep };
+  }, [inv]);
+
+  const openNew = () => { setForm({...emptyForm}); setEditing(null); setModal("form"); };
+  const openEdit = (b) => { setForm({...emptyForm, ...b}); setEditing(b.id); setModal("form"); };
+  const openFicha = (b) => { setFichaItem(b); setModal("ficha"); };
+
+  const save = () => {
+    if (!form.nombre.trim()) return;
+    const id = editing || uid();
+    // Track assignment history when asignado changes
+    const prev = editing ? inv.find(b => b.id === editing) : null;
+    let historial = form.historial || [];
+    if (prev && prev.asignado !== form.asignado && form.asignado) {
+      historial = [...historial, {
+        fecha: hoy(),
+        accion: "Asignado",
+        detalle: `Asignado a: ${form.asignado}${prev.asignado ? ` (anterior: ${prev.asignado})` : ""}`,
+      }];
+    }
+    if (prev && prev.estado !== form.estado) {
+      historial = [...historial, {
+        fecha: hoy(),
+        accion: "Cambio de estado",
+        detalle: `${INV_ESTADOS[prev.estado]?.l || prev.estado} → ${INV_ESTADOS[form.estado]?.l || form.estado}`,
+      }];
+    }
+    const reg = {...form, historial, id};
+    up(p => ({
+      ...p,
+      inventario: editing
+        ? (p.inventario||[]).map(b => b.id===editing ? reg : b)
+        : [...(p.inventario||[]), reg],
+    }));
+    (editing ? sbUpdate("inventario", id, reg) : sbInsert("inventario", id, reg));
+    setModal(false);
+  };
+
+  const remove = () => {
+    up(p => ({...p, inventario: (p.inventario||[]).filter(b => b.id !== del)}));
+    sbDelete("inventario", del);
+    setDel(null);
+  };
+
+  // Print / export full inventory
+  const imprimirInventario = () => {
+    const w = window.open("","_blank","width=900,height=700");
+    if (!w) return;
+    const filas = list.map(b => `
+      <tr>
+        <td>${b.codigo||"—"}</td>
+        <td>${b.nombre}</td>
+        <td>${INV_CATEGORIAS[b.categoria]||b.categoria}</td>
+        <td>${b.marca||"—"} ${b.modelo||""}</td>
+        <td>${b.numeroSerie||"—"}</td>
+        <td>${b.ubicacion||"—"}</td>
+        <td>${b.asignado||"—"}</td>
+        <td><span style="font-weight:600">${INV_ESTADOS[b.estado]?.l||b.estado}</span></td>
+      </tr>`).join("");
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Inventario — Dir. Arbolado</title>
+<style>
+@media print{.no-print{display:none!important}@page{size:A4 landscape;margin:1.5cm}}
+body{font-family:'Times New Roman',serif;font-size:10.5pt;color:#111}
+.page{max-width:1050px;margin:0 auto;padding:20px}
+.header{text-align:center;border-bottom:2px solid #1e3a8a;padding-bottom:12px;margin-bottom:18px}
+.header h1{font-size:13pt;font-weight:bold;margin:0 0 4px;text-transform:uppercase;color:#1e3a8a}
+.header p{font-size:10pt;color:#444;margin:2px 0}
+table{width:100%;border-collapse:collapse;font-size:9.5pt}
+th{background:#f0f0f0;border:1px solid #999;padding:5px 8px;font-weight:bold;text-align:left;text-transform:uppercase;font-size:9pt}
+td{border:1px solid #ccc;padding:4px 8px;vertical-align:top}
+tr:nth-child(even) td{background:#fafafa}
+.totales{margin-top:14px;font-size:10pt;color:#444}
+.btn{padding:10px 28px;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;background:#16a34a;color:white}
+</style></head><body>
+<div class="page">
+<div class="btn-bar no-print" style="text-align:center;margin-bottom:16px">
+  <button class="btn" onclick="window.print()">Imprimir</button>
+</div>
+<div class="header">
+  <h1>Municipalidad de San Miguel de Tucumán</h1>
+  <p>Dirección de Arbolado — Inventario de Bienes</p>
+  <p>Fecha de emisión: ${fmtDate(hoy())} · Total de bienes: ${list.length}</p>
+</div>
+<table>
+  <thead><tr><th>Código</th><th>Bien</th><th>Categoría</th><th>Marca / Modelo</th><th>N° Serie</th><th>Ubicación</th><th>Asignado a</th><th>Estado</th></tr></thead>
+  <tbody>${filas}</tbody>
+</table>
+<div class="totales">
+  Disponibles: <strong>${inv.filter(b=>b.estado==="disponible").length}</strong> &nbsp;|&nbsp;
+  Asignados: <strong>${inv.filter(b=>b.estado==="asignado").length}</strong> &nbsp;|&nbsp;
+  En reparación: <strong>${inv.filter(b=>b.estado==="en_reparacion").length}</strong> &nbsp;|&nbsp;
+  Fuera de servicio: <strong>${inv.filter(b=>b.estado==="fuera_servicio").length}</strong> &nbsp;|&nbsp;
+  Baja: <strong>${inv.filter(b=>b.estado==="baja").length}</strong>
+</div>
+</div></body></html>`);
+    w.document.close();
+  };
+
+  const printIcon = I.print;
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-0.5">Inventario</h2>
+          <p className="text-sm text-gray-500">Registro de bienes de la Dirección de Arbolado</p>
+        </div>
+        <div className="flex gap-2 flex-shrink-0">
+          <button onClick={imprimirInventario} disabled={inv.length===0}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40">
+            {printIcon} Exportar
+          </button>
+          <BtnNew onClick={openNew} label="Nuevo bien"/>
+        </div>
+      </div>
+
+      {/* Stats strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 border-l-4 border-l-gray-400">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Total bienes</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.tot}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 border-l-4 border-l-emerald-500">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Disponibles</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.disp}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 border-l-4 border-l-sky-500">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Asignados</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.asig}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 border-l-4 border-l-amber-500">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">En reparación</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.rep}</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="max-w-sm flex-1">
+          <SearchBar value={search} onChange={setSearch} placeholder="Buscar por nombre, código, marca o responsable..."/>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <select className={sel+" text-xs py-2 px-2.5 h-auto"} value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)}>
+            <option value="todos">Todos los estados</option>
+            {Object.entries(INV_ESTADOS).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+          </select>
+          <select className={sel+" text-xs py-2 px-2.5 h-auto"} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
+            <option value="todas">Todas las categorías</option>
+            {Object.entries(INV_CATEGORIAS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/50">
+                <TH>Código</TH>
+                <TH>Nombre / Bien</TH>
+                <TH className="hidden sm:table-cell">Categoría</TH>
+                <TH className="hidden md:table-cell">Marca / Modelo</TH>
+                <TH className="hidden lg:table-cell">Ubicación</TH>
+                <TH className="hidden lg:table-cell">Asignado a</TH>
+                <TH className="text-center">Estado</TH>
+                <TH className="text-right">Acciones</TH>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {list.length === 0 ? (
+                <EmptyRow cols={8} text={search||filtroEstado!=="todos"||filtroCategoria!=="todas"
+                  ? "Sin resultados para los filtros aplicados"
+                  : "Sin bienes registrados. Hacé clic en \"Nuevo bien\" para agregar uno."}/>
+              ) : list.map(b => (
+                <tr key={b.id} className="hover:bg-gray-50/50">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{b.codigo||"—"}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">{b.nombre}</td>
+                  <td className="px-4 py-3 text-gray-600 hidden sm:table-cell">{INV_CATEGORIAS[b.categoria]||b.categoria}</td>
+                  <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{[b.marca,b.modelo].filter(Boolean).join(" / ")||"—"}</td>
+                  <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{b.ubicacion||"—"}</td>
+                  <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{b.asignado||"—"}</td>
+                  <td className="px-4 py-3 text-center">
+                    <Badge label={INV_ESTADOS[b.estado]?.l||b.estado} color={INV_ESTADOS[b.estado]?.c||"gray"}/>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <button onClick={()=>openFicha(b)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Ver ficha">{I.eye}</button>
+                      <button onClick={()=>openEdit(b)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
+                      <button onClick={()=>setDel(b.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* FORM MODAL */}
+      <Modal open={modal==="form"} onClose={()=>setModal(false)} title={editing?"Editar bien":"Nuevo bien"} wide>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Código / N° inventario"><input className={inp} value={form.codigo} onChange={e=>f("codigo",e.target.value)} placeholder="Ej: DIR-001"/></Field>
+          <Field label="Categoría">
+            <select className={sel} value={form.categoria} onChange={e=>f("categoria",e.target.value)}>
+              {Object.entries(INV_CATEGORIAS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+            </select>
+          </Field>
+          <Field label="Nombre / Descripción" span2><input className={inp} value={form.nombre} onChange={e=>f("nombre",e.target.value)} placeholder="Nombre del bien"/></Field>
+          <Field label="Marca"><input className={inp} value={form.marca} onChange={e=>f("marca",e.target.value)} placeholder="Marca"/></Field>
+          <Field label="Modelo"><input className={inp} value={form.modelo} onChange={e=>f("modelo",e.target.value)} placeholder="Modelo"/></Field>
+          <Field label="N° de serie"><input className={inp} value={form.numeroSerie} onChange={e=>f("numeroSerie",e.target.value)} placeholder="Número de serie"/></Field>
+          <Field label="Estado">
+            <select className={sel} value={form.estado} onChange={e=>f("estado",e.target.value)}>
+              {Object.entries(INV_ESTADOS).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+            </select>
+          </Field>
+          <Field label="Ubicación"><input className={inp} value={form.ubicacion} onChange={e=>f("ubicacion",e.target.value)} placeholder="Depósito, oficina, cuadrilla..."/></Field>
+          <Field label="Asignado / Responsable"><input className={inp} value={form.asignado} onChange={e=>f("asignado",e.target.value)} placeholder="Nombre del responsable"/></Field>
+          <Field label="Fecha de adquisición"><input type="date" className={inp} value={form.fechaAdquisicion} onChange={e=>f("fechaAdquisicion",e.target.value)}/></Field>
+          <Field label="Observaciones" span2><textarea className={inp+" resize-none"} rows={2} value={form.observaciones} onChange={e=>f("observaciones",e.target.value)} placeholder="Estado de conservación, notas adicionales..."/></Field>
+        </div>
+        <SaveCancel onCancel={()=>setModal(false)} onSave={save}/>
+      </Modal>
+
+      {/* FICHA MODAL */}
+      <Modal open={modal==="ficha"} onClose={()=>setModal(false)} title={fichaItem ? `Ficha: ${fichaItem.nombre}` : ""} wide>
+        {fichaItem && (
+          <div>
+            {/* Datos principales */}
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 mb-6">
+              {[
+                ["Código",          fichaItem.codigo||"—"],
+                ["Categoría",       INV_CATEGORIAS[fichaItem.categoria]||fichaItem.categoria],
+                ["Marca",           fichaItem.marca||"—"],
+                ["Modelo",          fichaItem.modelo||"—"],
+                ["N° de serie",     fichaItem.numeroSerie||"—"],
+                ["Ubicación",       fichaItem.ubicacion||"—"],
+                ["Asignado a",      fichaItem.asignado||"—"],
+                ["Fecha adquisición",fmtDate(fichaItem.fechaAdquisicion)],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+                  <p className="text-sm text-gray-900 mt-0.5">{value}</p>
+                </div>
+              ))}
+              <div className="col-span-2">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Estado</p>
+                <div className="mt-1"><Badge label={INV_ESTADOS[fichaItem.estado]?.l||fichaItem.estado} color={INV_ESTADOS[fichaItem.estado]?.c||"gray"}/></div>
+              </div>
+              {fichaItem.observaciones && (
+                <div className="col-span-2">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Observaciones</p>
+                  <p className="text-sm text-gray-700 mt-0.5">{fichaItem.observaciones}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Historial de movimientos */}
+            {(fichaItem.historial||[]).length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-1.5 mb-3">Historial de movimientos</p>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {[...(fichaItem.historial||[])].reverse().map((h,i)=>(
+                    <div key={i} className="flex gap-3 text-sm">
+                      <span className="text-gray-400 shrink-0 text-xs pt-0.5">{fmtDate(h.fecha)}</span>
+                      <div>
+                        <span className="font-semibold text-gray-700">{h.accion}: </span>
+                        <span className="text-gray-600">{h.detalle}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={()=>{openEdit(fichaItem);}} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Editar</button>
+              <button onClick={()=>setModal(false)} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Cerrar</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDelete open={!!del} onClose={()=>setDel(null)} onConfirm={remove} itemName="este bien"/>
     </div>
   );
 }

@@ -3380,7 +3380,7 @@ function generarLugarTrabajo(reclamos) {
 // Convierte **negrita** markdown simple a <strong> para el HTML del documento
 const mdBoldToHtml = (txt) => (txt||"").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
 
-const generarParteHtml = (parte) => {
+const generarParteHtml = (parte, incluirOperativa) => {
   const turnoInfo = TURNOS_HORARIO[parte.turno] || TURNOS_HORARIO.manana;
   const desde = parte.horarioDesde || turnoInfo.desde;
   const hasta = parte.horarioHasta || turnoInfo.hasta;
@@ -3396,8 +3396,8 @@ const generarParteHtml = (parte) => {
     <tr><td>${i.af||""}</td><td>${i.nombre||""}</td><td></td></tr>
   `).join("") + `<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`;
 
-  return `
-<div class="parte-page">
+  // PARTE SUPERIOR — Recursos Humanos
+  const bloqueRRHH = `
   ${membrete()}
   <p class="parte-subtitulo">MUNICIPALIDAD DE SAN MIGUEL DE TUCUMAN<br/>DIRECCION DE ARBOLADO</p>
   <p class="parte-fecha">San Miguel de Tucumán ${fechaDoc}</p>
@@ -3422,8 +3422,15 @@ const generarParteHtml = (parte) => {
     </div>
   </div>
 
-  <p class="parte-firma">FIRMA DIRECTOR</p>
-</div>`;
+  <p class="parte-firma">FIRMA DIRECTOR</p>`;
+
+  // PARTE INFERIOR — Dirección de Arbolado (tabla operativa exclusivamente)
+  const bloqueOperativo = incluirOperativa
+    ? `<div class="parte-separador"></div>${generarTablaOperativaHtml()}`
+    : "";
+
+  // Una única hoja A4: RRHH arriba + tabla operativa abajo, sin salto de página forzado
+  return `<div class="parte-page">${bloqueRRHH}${bloqueOperativo}</div>`;
 };
 
 const generarTablaOperativaHtml = () => `
@@ -3439,16 +3446,15 @@ const generarTablaOperativaHtml = () => `
 
 const estiloParte = () => `
 <style>
-@media print { .no-print { display:none !important; } @page { size:A4; margin:1.3cm; } }
+@media print { .no-print { display:none !important; } @page { size:A4; margin:1.2cm; } }
 * { box-sizing:border-box; }
 body { font-family:'Times New Roman',Times,serif; font-size:10.5pt; color:#111; margin:0; }
-.parte-page { max-width:900px; margin:0 auto; padding:14px; page-break-after: always; }
-.parte-page:last-child { page-break-after: auto; }
+.parte-page { max-width:900px; margin:0 auto; padding:12px; }
 .membrete { margin-bottom:4px; padding-bottom:6px; border-bottom:none; }
-.membrete-img { max-height:58px; }
+.membrete-img { max-height:56px; }
 .parte-subtitulo { text-align:center; font-style:italic; font-size:9.5pt; line-height:1.3; margin:2px 0 6px; }
 .parte-fecha { text-align:right; font-weight:bold; font-size:10.5pt; margin-bottom:10px; }
-.parte-cols { display:flex; gap:16px; align-items:flex-start; }
+.parte-cols { display:flex; gap:16px; align-items:flex-start; page-break-inside: avoid; }
 .parte-col-izq { flex:0 0 42%; }
 .parte-col-der { flex:1; }
 .parte-horario { font-weight:bold; text-decoration:underline; font-size:10pt; margin-bottom:6px; }
@@ -3460,23 +3466,27 @@ table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold;
 .parte-lugar-box { border:1px solid #333; padding:8px 10px; font-size:9pt; }
 .parte-lugar-titulo { text-align:center; font-weight:bold; text-decoration:underline; margin:0 0 6px; font-size:9.5pt; }
 .parte-lugar-lista { margin:0; padding-left:16px; line-height:1.45; }
-.parte-lugar-lista li { margin-bottom:6px; text-align:justify; }
-.parte-firma { text-align:right; font-weight:bold; margin-top:50px; font-size:10pt; }
-table.parte-operativa { width:100%; border-collapse:collapse; font-size:8.5pt; margin-top:14px; }
+.parte-lugar-lista li { margin-bottom:6px; text-align:justify; page-break-inside: avoid; }
+.parte-firma { text-align:right; font-weight:bold; margin-top:36px; margin-bottom:0; font-size:10pt; }
+/* Separación clara entre Parte Superior (RRHH) y Parte Inferior (Dirección de Arbolado) */
+.parte-separador { margin-top:26px; padding-top:0; border-top:1.5pt solid #333; }
+table.parte-operativa { width:100%; border-collapse:collapse; font-size:8.5pt; margin-top:14px; page-break-inside: auto; }
+table.parte-operativa thead { display: table-header-group; }
 table.parte-operativa th, table.parte-operativa td { border:1px solid #333; padding:5px 6px; text-align:left; }
 table.parte-operativa th { background:#f0f0f0; font-weight:bold; text-transform:uppercase; font-size:8pt; }
-table.parte-operativa td { height:26px; }
+table.parte-operativa td { height:24px; }
+table.parte-operativa tr { page-break-inside: avoid; }
 .btn-bar { display:flex; gap:10px; justify-content:center; margin:16px 0; }
 .btn { padding:10px 28px; border:none; border-radius:8px; font-size:13px; cursor:pointer; font-weight:600; }
 .btn-print { background:#16a34a; color:white; }
 .btn-word { background:#1d4ed8; color:white; }
-tr, .parte-lugar-lista li { page-break-inside: avoid; }
+tr { page-break-inside: avoid; }
 </style>`;
 
 const abrirVentanaParte = (parte, incluirOperativa) => {
   const w = window.open("","_blank","width=960,height=760");
   if (!w) return;
-  const html = generarParteHtml(parte) + (incluirOperativa ? generarTablaOperativaHtml() : "");
+  const html = generarParteHtml(parte, incluirOperativa);
   const nombreArchivo = `Parte_${(parte.fecha||hoy()).replace(/-/g,"")}_Cuadrilla${parte.numeroCuadrilla||""}`;
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Parte de Trabajo</title>${estiloParte()}</head><body>
 <div class="btn-bar no-print">

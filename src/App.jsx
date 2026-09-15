@@ -1028,7 +1028,18 @@ function Expedientes({ data, up }) {
               </td>
               <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{fmtDate(e.fechaIngreso)}</td>
               <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{e.recibidoPor||"—"}</td>
-              <td className="px-4 py-3 text-right"><ActionBtns onEdit={()=>openEdit(e)} onDelete={()=>setDel(e.id)}/></td>
+              <td className="px-4 py-3 text-right">
+                <div className="flex items-center justify-end gap-1">
+                  <a href="https://expediente.smt.gob.ar/inicio" target="_blank" rel="noopener noreferrer"
+                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-sky-700 bg-sky-50 rounded-lg hover:bg-sky-100 transition-colors whitespace-nowrap"
+                    title="Abrir sistema municipal de expedientes">
+                    <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    Crear en SMT
+                  </a>
+                  <button onClick={()=>openEdit(e)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
+                  <button onClick={()=>setDel(e.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                </div>
+              </td>
             </tr>
           ))}
         </tbody></table>

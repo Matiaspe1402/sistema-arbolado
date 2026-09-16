@@ -3429,12 +3429,12 @@ const bloqueRRHH = (parte) => {
 
 // Hoja completa: 2 copias idénticas del parte (RRHH + Dirección de Arbolado) + tabla operativa única
 const generarParteHtml = (parte, incluirOperativa) => {
-  // HOJA 1 — Equipo de Trabajo + Lugar de Trabajo + Firma Director (sin tabla operativa)
-  const hoja1 = `<div class="parte-page">${bloqueRRHH(parte)}</div>`;
+  // HOJA 1 — DOS copias completas y apiladas del bloque RRHH (mismos datos), sin tabla operativa
+  const hoja1 = `<div class="parte-page parte-hoja1">${bloqueRRHH(parte)}<div class="parte-separador-hoja1"></div>${bloqueRRHH(parte)}</div>`;
 
   if (!incluirOperativa) return hoja1;
 
-  // HOJA 2 — misma copia (mismos datos dinámicos) + tabla operativa, una sola vez
+  // HOJA 2 — una copia + tabla operativa, una sola vez (sin cambios respecto a la versión actual)
   const hoja2 = `<div class="parte-page">${bloqueRRHH(parte)}<div class="parte-separador"></div>${generarTablaOperativaHtml()}</div>`;
 
   return hoja1 + hoja2;
@@ -3479,6 +3479,26 @@ table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold;
 .parte-firma { text-align:right; font-weight:bold; margin-top:40px; margin-bottom:0; font-size:10pt; }
 /* Separación clara antes de la tabla operativa, en la Hoja 2 */
 .parte-separador { margin-top:26px; padding-top:0; border-top:1.5pt solid #333; }
+/* HOJA 1 — sobreescritura compacta para que entren las DOS copias en una misma A4 (Hoja 2 no se ve afectada) */
+.parte-hoja1 { font-size:8pt; }
+.parte-hoja1 .membrete { margin-bottom:2px; padding-bottom:2px; }
+.parte-hoja1 .membrete-img { max-height:34px; }
+.parte-hoja1 .parte-subtitulo { font-size:7pt; line-height:1.15; margin:1px 0 3px; }
+.parte-hoja1 .parte-fecha { font-size:8pt; margin-bottom:5px; }
+.parte-hoja1 .parte-cols { gap:10px; }
+.parte-hoja1 .parte-horario { font-size:7.5pt; margin-bottom:3px; }
+.parte-hoja1 table.parte-equipo { font-size:7pt; }
+.parte-hoja1 table.parte-equipo th, .parte-hoja1 table.parte-equipo td { padding:1.5px 4px; }
+.parte-hoja1 table.parte-equipo thead tr:first-child th { font-size:6.8pt; }
+.parte-hoja1 table.parte-equipo thead tr:last-child th { font-size:6.6pt; }
+.parte-hoja1 .parte-orden-titulo { font-size:7.5pt; margin-bottom:3px; }
+.parte-hoja1 .parte-lugar-box { padding:4px 6px; font-size:6.8pt; }
+.parte-hoja1 .parte-lugar-titulo { font-size:7pt; margin:0 0 3px; }
+.parte-hoja1 .parte-lugar-lista { padding-left:12px; line-height:1.25; }
+.parte-hoja1 .parte-lugar-lista li { margin-bottom:2.5px; }
+.parte-hoja1 .parte-firma { margin-top:10px; font-size:7.5pt; }
+/* Separación entre las dos copias apiladas dentro de la Hoja 1 */
+.parte-separador-hoja1 { margin:12px 0; border-top:1px solid #999; }
 table.parte-operativa { width:100%; border-collapse:collapse; font-size:8.5pt; margin-top:14px; page-break-inside: auto; }
 table.parte-operativa thead { display: table-header-group; }
 table.parte-operativa th, table.parte-operativa td { border:1px solid #333; padding:5px 6px; text-align:left; }

@@ -3454,39 +3454,39 @@ const generarTablaOperativaHtml = () => `
 
 const estiloParte = () => `
 <style>
-@media print { .no-print { display:none !important; } @page { size:A4; margin:0.9cm; } }
+@media print { .no-print { display:none !important; } @page { size:A4; margin:0.6cm; } }
 * { box-sizing:border-box; }
-body { font-family:'Times New Roman',Times,serif; font-size:8pt; color:#111; margin:0; }
-.parte-page { max-width:900px; margin:0 auto; padding:8px; }
+body { font-family:'Times New Roman',Times,serif; font-size:11pt; color:#111; margin:0; }
+.parte-page { width:100%; max-width:100%; margin:0 auto; padding:2px 4px; }
 .parte-copia { page-break-inside: avoid; }
-.membrete { margin-bottom:2px; padding-bottom:2px; border-bottom:none; }
-.membrete-img { max-height:34px; }
-.parte-subtitulo { text-align:center; font-style:italic; font-size:7pt; line-height:1.15; margin:1px 0 3px; }
-.parte-fecha { text-align:right; font-weight:bold; font-size:8pt; margin-bottom:5px; }
-.parte-cols { display:flex; gap:10px; align-items:flex-start; page-break-inside: avoid; }
+.membrete { margin-bottom:4px; padding-bottom:3px; border-bottom:none; }
+.membrete-img { max-height:52px; }
+.parte-subtitulo { text-align:center; font-style:italic; font-size:8.5pt; line-height:1.2; margin:2px 0 5px; }
+.parte-fecha { text-align:right; font-weight:bold; font-size:11pt; margin-bottom:8px; }
+.parte-cols { display:flex; gap:18px; align-items:flex-start; page-break-inside: avoid; }
 .parte-col-izq { flex:0 0 42%; }
 .parte-col-der { flex:1; }
-.parte-horario { font-weight:bold; text-decoration:underline; font-size:7.5pt; margin-bottom:3px; }
-table.parte-equipo { width:100%; border-collapse:collapse; font-size:7pt; }
-table.parte-equipo th, table.parte-equipo td { border:1px solid #333; padding:1.5px 4px; }
-table.parte-equipo thead tr:first-child th { text-align:center; font-weight:bold; text-transform:uppercase; font-size:6.8pt; background:#fafafa; }
-table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold; background:#f0f0f0; font-size:6.6pt; }
-.parte-orden-titulo { text-align:center; font-weight:bold; text-decoration:underline; font-size:7.5pt; margin-bottom:3px; }
-.parte-lugar-box { border:1px solid #333; padding:4px 6px; font-size:6.8pt; }
-.parte-lugar-titulo { text-align:center; font-weight:bold; text-decoration:underline; margin:0 0 3px; font-size:7pt; }
-.parte-lugar-lista { margin:0; padding-left:12px; line-height:1.25; }
-.parte-lugar-lista li { margin-bottom:2.5px; text-align:justify; page-break-inside: avoid; }
-.parte-firma { text-align:right; font-weight:bold; margin-top:10px; margin-bottom:0; font-size:7.5pt; }
+.parte-horario { font-weight:bold; text-decoration:underline; font-size:10pt; margin-bottom:5px; }
+table.parte-equipo { width:100%; border-collapse:collapse; font-size:9.5pt; }
+table.parte-equipo th, table.parte-equipo td { border:1px solid #333; padding:3.5px 7px; }
+table.parte-equipo thead tr:first-child th { text-align:center; font-weight:bold; text-transform:uppercase; font-size:9pt; background:#fafafa; }
+table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold; background:#f0f0f0; font-size:8.7pt; }
+.parte-orden-titulo { text-align:center; font-weight:bold; text-decoration:underline; font-size:10pt; margin-bottom:5px; }
+.parte-lugar-box { border:1px solid #333; padding:7px 11px; font-size:9pt; }
+.parte-lugar-titulo { text-align:center; font-weight:bold; text-decoration:underline; margin:0 0 5px; font-size:9.5pt; }
+.parte-lugar-lista { margin:0; padding-left:14px; line-height:1.32; }
+.parte-lugar-lista li { margin-bottom:4px; text-align:justify; page-break-inside: avoid; }
+.parte-firma { text-align:right; font-weight:bold; margin-top:16px; margin-bottom:0; font-size:10pt; }
 /* Línea de corte entre la copia de RRHH y la copia de Dirección de Arbolado */
-.parte-linea-corte { display:flex; align-items:center; margin:8px 0; border-top:1px dashed #666; position:relative; }
-.parte-linea-corte span { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; padding:0 8px; font-size:6.5pt; color:#666; letter-spacing:0.3px; white-space:nowrap; }
+.parte-linea-corte { display:flex; align-items:center; margin:12px 0; border-top:1px dashed #666; position:relative; }
+.parte-linea-corte span { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; padding:0 10px; font-size:8pt; color:#666; letter-spacing:0.3px; white-space:nowrap; }
 /* Separación clara antes de la tabla operativa (Dirección de Arbolado) */
-.parte-separador { margin-top:10px; padding-top:0; border-top:1.5pt solid #333; }
-table.parte-operativa { width:100%; border-collapse:collapse; font-size:7.2pt; margin-top:6px; page-break-inside: auto; }
+.parte-separador { margin-top:14px; padding-top:0; border-top:1.5pt solid #333; }
+table.parte-operativa { width:100%; border-collapse:collapse; font-size:9.5pt; margin-top:8px; page-break-inside: auto; }
 table.parte-operativa thead { display: table-header-group; }
-table.parte-operativa th, table.parte-operativa td { border:1px solid #333; padding:2.5px 4px; text-align:left; }
-table.parte-operativa th { background:#f0f0f0; font-weight:bold; text-transform:uppercase; font-size:6.6pt; }
-table.parte-operativa td { height:15px; }
+table.parte-operativa th, table.parte-operativa td { border:1px solid #333; padding:5px 8px; text-align:left; }
+table.parte-operativa th { background:#f0f0f0; font-weight:bold; text-transform:uppercase; font-size:8.7pt; }
+table.parte-operativa td { height:24px; }
 table.parte-operativa tr { page-break-inside: avoid; }
 .btn-bar { display:flex; gap:10px; justify-content:center; margin:16px 0; }
 .btn { padding:10px 28px; border:none; border-radius:8px; font-size:13px; cursor:pointer; font-weight:600; }

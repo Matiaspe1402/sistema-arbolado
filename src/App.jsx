@@ -3380,7 +3380,8 @@ function generarLugarTrabajo(reclamos) {
 // Convierte **negrita** markdown simple a <strong> para el HTML del documento
 const mdBoldToHtml = (txt) => (txt||"").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
 
-const generarParteHtml = (parte, incluirOperativa) => {
+// Genera el bloque "Equipo de Trabajo + Lugar de Trabajo + Firma Director" (una copia)
+const bloqueRRHH = (parte) => {
   const turnoInfo = TURNOS_HORARIO[parte.turno] || TURNOS_HORARIO.manana;
   const desde = parte.horarioDesde || turnoInfo.desde;
   const hasta = parte.horarioHasta || turnoInfo.hasta;
@@ -3396,41 +3397,48 @@ const generarParteHtml = (parte, incluirOperativa) => {
     <tr><td>${i.af||""}</td><td>${i.nombre||""}</td><td></td></tr>
   `).join("") + `<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`;
 
-  // PARTE SUPERIOR — Recursos Humanos
-  const bloqueRRHH = `
-  ${membrete()}
-  <p class="parte-subtitulo">MUNICIPALIDAD DE SAN MIGUEL DE TUCUMAN<br/>DIRECCION DE ARBOLADO</p>
-  <p class="parte-fecha">San Miguel de Tucumán ${fechaDoc}</p>
+  return `
+  <div class="parte-copia">
+    ${membrete()}
+    <p class="parte-subtitulo">MUNICIPALIDAD DE SAN MIGUEL DE TUCUMAN<br/>DIRECCION DE ARBOLADO</p>
+    <p class="parte-fecha">San Miguel de Tucumán ${fechaDoc}</p>
 
-  <div class="parte-cols">
-    <div class="parte-col-izq">
-      <p class="parte-horario">Horario de Trabajo de Turno ${turnoInfo.label}: ${desde} a ${hasta} hs</p>
-      <table class="parte-equipo">
-        <thead>
-          <tr><th colspan="3">EQUIPO DE TRABAJO N° ${parte.numeroEquipo||parte.numeroCuadrilla||""} - TURNO ${turnoInfo.label.toUpperCase()}</th></tr>
-          <tr><th style="width:18%">AF</th><th>APELLIDO Y NOMBRE</th><th style="width:22%">FIRMA</th></tr>
-        </thead>
-        <tbody>${filasIntegrantes}</tbody>
-      </table>
-    </div>
-    <div class="parte-col-der">
-      <p class="parte-orden-titulo">Orden de Trabajo</p>
-      <div class="parte-lugar-box">
-        <p class="parte-lugar-titulo">LUGAR DE TRABAJO</p>
-        <ul class="parte-lugar-lista">${bullets || "<li>Sin reclamos cargados.</li>"}</ul>
+    <div class="parte-cols">
+      <div class="parte-col-izq">
+        <p class="parte-horario">Horario de Trabajo de Turno ${turnoInfo.label}: ${desde} a ${hasta} hs</p>
+        <table class="parte-equipo">
+          <thead>
+            <tr><th colspan="3">EQUIPO DE TRABAJO N° ${parte.numeroEquipo||parte.numeroCuadrilla||""} - TURNO ${turnoInfo.label.toUpperCase()}</th></tr>
+            <tr><th style="width:18%">AF</th><th>APELLIDO Y NOMBRE</th><th style="width:22%">FIRMA</th></tr>
+          </thead>
+          <tbody>${filasIntegrantes}</tbody>
+        </table>
+      </div>
+      <div class="parte-col-der">
+        <p class="parte-orden-titulo">Orden de Trabajo</p>
+        <div class="parte-lugar-box">
+          <p class="parte-lugar-titulo">LUGAR DE TRABAJO</p>
+          <ul class="parte-lugar-lista">${bullets || "<li>Sin reclamos cargados.</li>"}</ul>
+        </div>
       </div>
     </div>
-  </div>
 
-  <p class="parte-firma">FIRMA DIRECTOR</p>`;
+    <p class="parte-firma">FIRMA DIRECTOR</p>
+  </div>`;
+};
 
-  // PARTE INFERIOR — Dirección de Arbolado (tabla operativa exclusivamente)
+// Hoja completa: 2 copias idénticas del parte (RRHH + Dirección de Arbolado) + tabla operativa única
+const generarParteHtml = (parte, incluirOperativa) => {
+  const copia1 = bloqueRRHH(parte);
+  const copia2 = bloqueRRHH(parte);
+
+  const lineaCorte = `<div class="parte-linea-corte"><span>&#9986;&nbsp;&nbsp;PARA DIRECCIÓN DE ARBOLADO&nbsp;&nbsp;&#9986;</span></div>`;
+
   const bloqueOperativo = incluirOperativa
     ? `<div class="parte-separador"></div>${generarTablaOperativaHtml()}`
     : "";
 
-  // Una única hoja A4: RRHH arriba + tabla operativa abajo, sin salto de página forzado
-  return `<div class="parte-page">${bloqueRRHH}${bloqueOperativo}</div>`;
+  return `<div class="parte-page">${copia1}${lineaCorte}${copia2}${bloqueOperativo}</div>`;
 };
 
 const generarTablaOperativaHtml = () => `
@@ -3446,35 +3454,39 @@ const generarTablaOperativaHtml = () => `
 
 const estiloParte = () => `
 <style>
-@media print { .no-print { display:none !important; } @page { size:A4; margin:1.2cm; } }
+@media print { .no-print { display:none !important; } @page { size:A4; margin:0.9cm; } }
 * { box-sizing:border-box; }
-body { font-family:'Times New Roman',Times,serif; font-size:10.5pt; color:#111; margin:0; }
-.parte-page { max-width:900px; margin:0 auto; padding:12px; }
-.membrete { margin-bottom:4px; padding-bottom:6px; border-bottom:none; }
-.membrete-img { max-height:56px; }
-.parte-subtitulo { text-align:center; font-style:italic; font-size:9.5pt; line-height:1.3; margin:2px 0 6px; }
-.parte-fecha { text-align:right; font-weight:bold; font-size:10.5pt; margin-bottom:10px; }
-.parte-cols { display:flex; gap:16px; align-items:flex-start; page-break-inside: avoid; }
+body { font-family:'Times New Roman',Times,serif; font-size:8pt; color:#111; margin:0; }
+.parte-page { max-width:900px; margin:0 auto; padding:8px; }
+.parte-copia { page-break-inside: avoid; }
+.membrete { margin-bottom:2px; padding-bottom:2px; border-bottom:none; }
+.membrete-img { max-height:34px; }
+.parte-subtitulo { text-align:center; font-style:italic; font-size:7pt; line-height:1.15; margin:1px 0 3px; }
+.parte-fecha { text-align:right; font-weight:bold; font-size:8pt; margin-bottom:5px; }
+.parte-cols { display:flex; gap:10px; align-items:flex-start; page-break-inside: avoid; }
 .parte-col-izq { flex:0 0 42%; }
 .parte-col-der { flex:1; }
-.parte-horario { font-weight:bold; text-decoration:underline; font-size:10pt; margin-bottom:6px; }
-table.parte-equipo { width:100%; border-collapse:collapse; font-size:9pt; }
-table.parte-equipo th, table.parte-equipo td { border:1px solid #333; padding:3px 6px; }
-table.parte-equipo thead tr:first-child th { text-align:center; font-weight:bold; text-transform:uppercase; font-size:8.8pt; background:#fafafa; }
-table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold; background:#f0f0f0; font-size:8.5pt; }
-.parte-orden-titulo { text-align:center; font-weight:bold; text-decoration:underline; font-size:10pt; margin-bottom:6px; }
-.parte-lugar-box { border:1px solid #333; padding:8px 10px; font-size:9pt; }
-.parte-lugar-titulo { text-align:center; font-weight:bold; text-decoration:underline; margin:0 0 6px; font-size:9.5pt; }
-.parte-lugar-lista { margin:0; padding-left:16px; line-height:1.45; }
-.parte-lugar-lista li { margin-bottom:6px; text-align:justify; page-break-inside: avoid; }
-.parte-firma { text-align:right; font-weight:bold; margin-top:36px; margin-bottom:0; font-size:10pt; }
-/* Separación clara entre Parte Superior (RRHH) y Parte Inferior (Dirección de Arbolado) */
-.parte-separador { margin-top:26px; padding-top:0; border-top:1.5pt solid #333; }
-table.parte-operativa { width:100%; border-collapse:collapse; font-size:8.5pt; margin-top:14px; page-break-inside: auto; }
+.parte-horario { font-weight:bold; text-decoration:underline; font-size:7.5pt; margin-bottom:3px; }
+table.parte-equipo { width:100%; border-collapse:collapse; font-size:7pt; }
+table.parte-equipo th, table.parte-equipo td { border:1px solid #333; padding:1.5px 4px; }
+table.parte-equipo thead tr:first-child th { text-align:center; font-weight:bold; text-transform:uppercase; font-size:6.8pt; background:#fafafa; }
+table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold; background:#f0f0f0; font-size:6.6pt; }
+.parte-orden-titulo { text-align:center; font-weight:bold; text-decoration:underline; font-size:7.5pt; margin-bottom:3px; }
+.parte-lugar-box { border:1px solid #333; padding:4px 6px; font-size:6.8pt; }
+.parte-lugar-titulo { text-align:center; font-weight:bold; text-decoration:underline; margin:0 0 3px; font-size:7pt; }
+.parte-lugar-lista { margin:0; padding-left:12px; line-height:1.25; }
+.parte-lugar-lista li { margin-bottom:2.5px; text-align:justify; page-break-inside: avoid; }
+.parte-firma { text-align:right; font-weight:bold; margin-top:10px; margin-bottom:0; font-size:7.5pt; }
+/* Línea de corte entre la copia de RRHH y la copia de Dirección de Arbolado */
+.parte-linea-corte { display:flex; align-items:center; margin:8px 0; border-top:1px dashed #666; position:relative; }
+.parte-linea-corte span { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#fff; padding:0 8px; font-size:6.5pt; color:#666; letter-spacing:0.3px; white-space:nowrap; }
+/* Separación clara antes de la tabla operativa (Dirección de Arbolado) */
+.parte-separador { margin-top:10px; padding-top:0; border-top:1.5pt solid #333; }
+table.parte-operativa { width:100%; border-collapse:collapse; font-size:7.2pt; margin-top:6px; page-break-inside: auto; }
 table.parte-operativa thead { display: table-header-group; }
-table.parte-operativa th, table.parte-operativa td { border:1px solid #333; padding:5px 6px; text-align:left; }
-table.parte-operativa th { background:#f0f0f0; font-weight:bold; text-transform:uppercase; font-size:8pt; }
-table.parte-operativa td { height:24px; }
+table.parte-operativa th, table.parte-operativa td { border:1px solid #333; padding:2.5px 4px; text-align:left; }
+table.parte-operativa th { background:#f0f0f0; font-weight:bold; text-transform:uppercase; font-size:6.6pt; }
+table.parte-operativa td { height:15px; }
 table.parte-operativa tr { page-break-inside: avoid; }
 .btn-bar { display:flex; gap:10px; justify-content:center; margin:16px 0; }
 .btn { padding:10px 28px; border:none; border-radius:8px; font-size:13px; cursor:pointer; font-weight:600; }

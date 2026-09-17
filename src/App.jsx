@@ -3480,23 +3480,23 @@ table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold;
 /* Separación clara antes de la tabla operativa, en la Hoja 2 */
 .parte-separador { margin-top:26px; padding-top:0; border-top:1.5pt solid #333; }
 /* HOJA 1 — sobreescritura compacta para que entren las DOS copias en una misma A4 (Hoja 2 no se ve afectada) */
-.parte-hoja1 { font-size:9pt; }
-.parte-hoja1 .membrete { margin-bottom:3px; padding-bottom:2px; }
-.parte-hoja1 .membrete-img { max-height:40px; }
-.parte-hoja1 .parte-subtitulo { font-size:7.8pt; line-height:1.2; margin:2px 0 4px; }
-.parte-hoja1 .parte-fecha { font-size:9pt; margin-bottom:6px; }
-.parte-hoja1 .parte-cols { gap:12px; }
-.parte-hoja1 .parte-horario { font-size:8.3pt; margin-bottom:4px; }
-.parte-hoja1 table.parte-equipo { font-size:8pt; }
-.parte-hoja1 table.parte-equipo th, .parte-hoja1 table.parte-equipo td { padding:2.5px 5px; }
-.parte-hoja1 table.parte-equipo thead tr:first-child th { font-size:7.6pt; }
-.parte-hoja1 table.parte-equipo thead tr:last-child th { font-size:7.4pt; }
-.parte-hoja1 .parte-orden-titulo { font-size:8.3pt; margin-bottom:4px; }
-.parte-hoja1 .parte-lugar-box { padding:5px 8px; font-size:7.6pt; }
-.parte-hoja1 .parte-lugar-titulo { font-size:7.8pt; margin:0 0 4px; }
-.parte-hoja1 .parte-lugar-lista { padding-left:13px; line-height:1.3; }
-.parte-hoja1 .parte-lugar-lista li { margin-bottom:3px; }
-.parte-hoja1 .parte-firma { margin-top:13px; font-size:8.3pt; }
+.parte-hoja1 { font-size:11pt; }
+.parte-hoja1 .membrete { margin-bottom:4px; padding-bottom:3px; }
+.parte-hoja1 .membrete-img { max-height:48px; }
+.parte-hoja1 .parte-subtitulo { font-size:9.5pt; line-height:1.25; margin:2px 0 5px; }
+.parte-hoja1 .parte-fecha { font-size:11pt; margin-bottom:8px; }
+.parte-hoja1 .parte-cols { gap:14px; }
+.parte-hoja1 .parte-horario { font-size:10pt; margin-bottom:5px; }
+.parte-hoja1 table.parte-equipo { font-size:9.5pt; }
+.parte-hoja1 table.parte-equipo th, .parte-hoja1 table.parte-equipo td { padding:4px 7px; }
+.parte-hoja1 table.parte-equipo thead tr:first-child th { font-size:9pt; }
+.parte-hoja1 table.parte-equipo thead tr:last-child th { font-size:8.7pt; }
+.parte-hoja1 .parte-orden-titulo { font-size:10pt; margin-bottom:5px; }
+.parte-hoja1 .parte-lugar-box { padding:8px 11px; font-size:9pt; }
+.parte-hoja1 .parte-lugar-titulo { font-size:9.5pt; margin:0 0 5px; }
+.parte-hoja1 .parte-lugar-lista { padding-left:15px; line-height:1.35; }
+.parte-hoja1 .parte-lugar-lista li { margin-bottom:4.5px; }
+.parte-hoja1 .parte-firma { margin-top:18px; font-size:10pt; }
 /* Separación entre las dos copias apiladas dentro de la Hoja 1 */
 .parte-separador-hoja1 { margin:14px 0; border-top:1px solid #999; }
 table.parte-operativa { width:100%; border-collapse:collapse; font-size:8.5pt; margin-top:14px; page-break-inside: auto; }

@@ -3514,7 +3514,7 @@ table.parte-equipo thead tr:last-child th { text-align:center; font-weight:bold;
 .parte-hoja1 .parte-lugar-titulo { font-size:9.5pt; margin:0 0 5px; }
 .parte-hoja1 .parte-lugar-lista { padding-left:15px; line-height:1.35; }
 .parte-hoja1 .parte-lugar-lista li { margin-bottom:4.5px; }
-.parte-hoja1 .parte-firma { margin-top:18px; font-size:10pt; }
+.parte-hoja1 .parte-firma { margin-top:36px; font-size:10pt; }
 /* Separación entre las dos copias apiladas dentro de la Hoja 1 */
 .parte-separador-hoja1 { margin:14px 0; border-top:1px solid #999; }
 table.parte-operativa { width:100%; border-collapse:collapse; font-size:8.5pt; margin-top:14px; page-break-inside: auto; }

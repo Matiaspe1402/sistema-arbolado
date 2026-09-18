@@ -132,6 +132,8 @@ async function sbRpc(fnName, params) {
 // ─── Usuario autenticado (usado para auditoría automática) ───
 let CURRENT_USER = null;
 function setCurrentUserRef(u) { CURRENT_USER = u; }
+// ─── Autorización de 2 niveles: Administrador (todo) vs Administrativo (solo consulta) ───
+function isAdmin() { return CURRENT_USER?.rol === "administrador"; }
 
 async function sbList(table) {
   try {
@@ -349,6 +351,7 @@ function PageHeader({ title, sub, children }) {
 }
 
 function BtnNew({ onClick, label }) {
+  if (!isAdmin()) return null;
   return <button onClick={onClick} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">{I.plus} {label}</button>;
 }
 
@@ -357,6 +360,7 @@ function EmptyRow({ cols, text }) {
 }
 
 function ActionBtns({ onEdit, onDelete }) {
+  if (!isAdmin()) return null;
   return (
     <div className="flex items-center justify-end gap-0.5">
       <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
@@ -492,7 +496,7 @@ export default function App() {
   }, [session]);
   const up = useCallback((fn) => { setData(prev => fn(prev)); }, []);
 
-  const ROLES = { administrador:"Administrador", director:"Director", administrativo:"Administrativo", inspector:"Inspector" };
+  const ROLES = { administrador:"Administrador", administrativo:"Administrativo" };
 
   const sections = [
     { heading: "General", items: [
@@ -1049,8 +1053,8 @@ function Expedientes({ data, up }) {
                     <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                     Crear en SMT
                   </a>
-                  <button onClick={()=>openEdit(e)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
-                  <button onClick={()=>setDel(e.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                  {isAdmin() && <button onClick={()=>openEdit(e)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>}
+                  {isAdmin() && <button onClick={()=>setDel(e.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>}
                 </div>
               </td>
             </tr>
@@ -1350,7 +1354,7 @@ function descargarWord(){
   return (
     <div>
       <PageHeader title="Caja Chica" sub="Rendición mensual de gastos">
-        <button onClick={()=>{setPInput(data.cajaChica.presupuesto.toString());setModalP(true);}} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Presupuesto</button>
+        {isAdmin() && <button onClick={()=>{setPInput(data.cajaChica.presupuesto.toString());setModalP(true);}} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors">Presupuesto</button>}
         <button onClick={imprimirRendicion} disabled={regs.length===0} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-blue-700 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">{I.print} Generar rendición</button>
         <BtnNew onClick={openNew} label="Nueva factura"/>
       </PageHeader>
@@ -1508,7 +1512,7 @@ function TareasPage({ data, up }) {
               <div key={col.id}>
                 <div className={`flex items-center justify-between mb-3 pb-2 border-b-2 ${col.border}`}>
                   <div className="flex items-center gap-2"><span className={`text-sm font-bold ${col.text}`}>{col.label}</span><span className={`${col.bg} ${col.text} text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center`}>{items.length}</span></div>
-                  <button onClick={()=>openNew(col.id)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">{I.plus}</button>
+                  {isAdmin() && <button onClick={()=>openNew(col.id)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">{I.plus}</button>}
                 </div>
                 <div className="space-y-2.5">
                   {items.length===0 && <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center"><p className="text-xs text-gray-400">Sin tareas</p></div>}
@@ -1517,8 +1521,8 @@ function TareasPage({ data, up }) {
                       <div className="flex items-start justify-between gap-2 mb-2">
                         <p className="text-sm font-medium text-gray-900 leading-snug">{t.descripcion}</p>
                         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                          <button onClick={()=>openEdit(t)} className="p-1 rounded hover:bg-gray-100 text-gray-400">{I.edit}</button>
-                          <button onClick={()=>setDel(t.id)} className="p-1 rounded hover:bg-rose-50 text-gray-400 hover:text-rose-500">{I.trash}</button>
+                          {isAdmin() && <button onClick={()=>openEdit(t)} className="p-1 rounded hover:bg-gray-100 text-gray-400">{I.edit}</button>}
+                          {isAdmin() && <button onClick={()=>setDel(t.id)} className="p-1 rounded hover:bg-rose-50 text-gray-400 hover:text-rose-500">{I.trash}</button>}
                         </div>
                       </div>
                       <div className="flex items-center justify-between mt-2">
@@ -1526,8 +1530,8 @@ function TareasPage({ data, up }) {
                         {t.fechaLimite&&<span className="text-xs text-gray-400">{fmtDate(t.fechaLimite)}</span>}
                       </div>
                       <div className="flex gap-1.5 mt-3 pt-2.5 border-t border-gray-50">
-                        {ci>0 && <button onClick={()=>move(t.id,cols[ci-1].id)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">← {cols[ci-1].label}</button>}
-                        {ci<2 && <button onClick={()=>move(t.id,cols[ci+1].id)} className="text-xs text-gray-400 hover:text-gray-600 font-medium ml-auto">{cols[ci+1].label} →</button>}
+                        {isAdmin() && ci>0 && <button onClick={()=>move(t.id,cols[ci-1].id)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">← {cols[ci-1].label}</button>}
+                        {isAdmin() && ci<2 && <button onClick={()=>move(t.id,cols[ci+1].id)} className="text-xs text-gray-400 hover:text-gray-600 font-medium ml-auto">{cols[ci+1].label} →</button>}
                       </div>
                     </div>
                   ))}
@@ -1862,8 +1866,8 @@ function DescansosPage({ data, up }) {
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-0.5">
                     <button onClick={()=>generarResolucion(d)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar resolución">{printIcon}</button>
-                    <button onClick={()=>openEdit(d)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
-                    <button onClick={()=>setDel(d)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                    {isAdmin() && <button onClick={()=>openEdit(d)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>}
+                    {isAdmin() && <button onClick={()=>setDel(d)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>}
                   </div>
                 </td>
               </tr>
@@ -1995,8 +1999,8 @@ ${membrete()}
               <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-0.5">
                   <button onClick={()=>generarNota(l)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar nota">{printIcon}</button>
-                  <button onClick={()=>openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
-                  <button onClick={()=>setDel(l.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                  {isAdmin() && <button onClick={()=>openEdit(l)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>}
+                  {isAdmin() && <button onClick={()=>setDel(l.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>}
                 </div>
               </td>
             </tr>
@@ -2111,8 +2115,8 @@ function ResolucionesPage({ data, up }) {
               <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-0.5">
                   <button onClick={()=>handleGenerar(r)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Generar documento">{printIcon}</button>
-                  <button onClick={()=>openEdit(r)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
-                  <button onClick={()=>setDel(r.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                  {isAdmin() && <button onClick={()=>openEdit(r)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>}
+                  {isAdmin() && <button onClick={()=>setDel(r.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>}
                 </div>
               </td>
             </tr>
@@ -2221,8 +2225,8 @@ function ProveedoresPage({ data, up, setPage }) {
                   {p.rubro && <Badge label={p.rubro} color="blue"/>}
                 </div>
                 <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={()=>openEdit(p)} className="p-1 rounded hover:bg-gray-100 text-gray-400">{I.edit}</button>
-                  <button onClick={()=>setDel(p.id)} className="p-1 rounded hover:bg-rose-50 text-gray-400 hover:text-rose-500">{I.trash}</button>
+                  {isAdmin() && <button onClick={()=>openEdit(p)} className="p-1 rounded hover:bg-gray-100 text-gray-400">{I.edit}</button>}
+                  {isAdmin() && <button onClick={()=>setDel(p.id)} className="p-1 rounded hover:bg-rose-50 text-gray-400 hover:text-rose-500">{I.trash}</button>}
                 </div>
               </div>
               {p.encargado && <p className="text-xs text-gray-600 mb-1"><span className="text-gray-400">Encargado:</span> {p.encargado}</p>}
@@ -2522,8 +2526,8 @@ ${html.replace(/<html[^>]*>|<\/html>|<head>[\s\S]*?<\/head>/gi,'')}
                 <div className="flex items-center justify-end gap-0.5">
                   <button onClick={()=>downloadWord(n)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Descargar Word">{downloadIcon}</button>
                   <button onClick={()=>handlePrint(n)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="Imprimir">{I.print}</button>
-                  <button onClick={()=>openEdit(n)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Editar">{I.edit}</button>
-                  <button onClick={()=>setDel(n.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors" title="Eliminar">{I.trash}</button>
+                  {isAdmin() && <button onClick={()=>openEdit(n)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Editar">{I.edit}</button>}
+                  {isAdmin() && <button onClick={()=>setDel(n.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors" title="Eliminar">{I.trash}</button>}
                 </div>
               </td>
             </tr>
@@ -2789,7 +2793,7 @@ function PersonalPage({ data, up }) {
             </div>
             {verFicha.observaciones && (<div><p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Observaciones</p><p className="text-sm text-gray-700">{verFicha.observaciones}</p></div>)}
             <div className="flex justify-end gap-3 mt-6">
-              <button onClick={()=>{ openEdit(verFicha); setVerFicha(null); }} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Editar</button>
+              {isAdmin() && <button onClick={()=>{ openEdit(verFicha); setVerFicha(null); }} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Editar</button>}
               <button onClick={()=>setVerFicha(null)} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Cerrar</button>
             </div>
           </div>
@@ -2968,7 +2972,7 @@ function GestionArboladoPage({ data, up, tipo, tipoLabel }) {
 function UsuariosPage() {
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
-  const ROLES = { administrador:"Administrador", director:"Director", administrativo:"Administrativo", inspector:"Inspector" };
+  const ROLES = { administrador:"Administrador", administrativo:"Administrativo" };
 
   const cargar = () => { setLoading(true); sbListProfiles().then(u => { setUsuarios(u); setLoading(false); }); };
   useEffect(() => { cargar(); }, []);
@@ -2976,6 +2980,12 @@ function UsuariosPage() {
   const cambiarRol = async (id, rol) => {
     setUsuarios(prev => prev.map(u => u.id===id ? {...u, rol} : u));
     await sbUpdateProfile(id, { rol });
+  };
+  const cambiarNombreLocal = (id, nombre) => {
+    setUsuarios(prev => prev.map(u => u.id===id ? {...u, nombre} : u));
+  };
+  const guardarNombre = async (id, nombre) => {
+    await sbUpdateProfile(id, { nombre });
   };
 
   return (
@@ -2991,7 +3001,15 @@ function UsuariosPage() {
         </tr></thead><tbody className="divide-y divide-gray-50">
           {loading ? <EmptyRow cols={3} text="Cargando..."/> : usuarios.length===0 ? <EmptyRow cols={3} text="Sin usuarios registrados todavía"/> : usuarios.map(u => (
             <tr key={u.id} className="hover:bg-gray-50/50">
-              <td className="px-4 py-3 font-medium text-gray-900">{u.nombre || "—"}</td>
+              <td className="px-4 py-3">
+                <input
+                  className={inp + " max-w-[220px]"}
+                  value={u.nombre || ""}
+                  placeholder="Nombre y apellido"
+                  onChange={e=>cambiarNombreLocal(u.id, e.target.value)}
+                  onBlur={e=>guardarNombre(u.id, e.target.value)}
+                />
+              </td>
               <td className="px-4 py-3 text-gray-600">{u.email}</td>
               <td className="px-4 py-3">
                 <select className={sel + " max-w-[180px]"} value={u.rol||"administrativo"} onChange={e=>cambiarRol(u.id, e.target.value)}>
@@ -3256,8 +3274,8 @@ tr:nth-child(even) td{background:#fafafa}
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-0.5">
                       <button onClick={()=>openFicha(b)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Ver ficha">{I.eye}</button>
-                      <button onClick={()=>openEdit(b)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>
-                      <button onClick={()=>setDel(b.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>
+                      {isAdmin() && <button onClick={()=>openEdit(b)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">{I.edit}</button>}
+                      {isAdmin() && <button onClick={()=>setDel(b.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors">{I.trash}</button>}
                     </div>
                   </td>
                 </tr>
@@ -3345,7 +3363,7 @@ tr:nth-child(even) td{background:#fafafa}
             )}
 
             <div className="flex justify-end gap-3 mt-6">
-              <button onClick={()=>{openEdit(fichaItem);}} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Editar</button>
+              {isAdmin() && <button onClick={()=>{openEdit(fichaItem);}} className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">Editar</button>}
               <button onClick={()=>setModal(false)} className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors">Cerrar</button>
             </div>
           </div>
@@ -3600,9 +3618,9 @@ function CuadrillasPage({ data, up }) {
               )}
             </div>
             <div className="flex gap-2 pt-2 border-t border-gray-50">
-              <button onClick={()=>openEdit(c)} className="flex-1 text-xs font-semibold text-gray-600 bg-gray-50 rounded-lg py-1.5 hover:bg-gray-100 transition-colors">Editar</button>
-              <button onClick={()=>toggleEstado(c)} className="flex-1 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg py-1.5 hover:bg-blue-100 transition-colors">{c.estado==="activa"?"Desactivar":"Activar"}</button>
-              <button onClick={()=>setDel(c.id)} className="px-2.5 text-xs font-semibold text-rose-500 bg-rose-50 rounded-lg py-1.5 hover:bg-rose-100 transition-colors">{I.trash}</button>
+              {isAdmin() && <button onClick={()=>openEdit(c)} className="flex-1 text-xs font-semibold text-gray-600 bg-gray-50 rounded-lg py-1.5 hover:bg-gray-100 transition-colors">Editar</button>}
+              {isAdmin() && <button onClick={()=>toggleEstado(c)} className="flex-1 text-xs font-semibold text-blue-600 bg-blue-50 rounded-lg py-1.5 hover:bg-blue-100 transition-colors">{c.estado==="activa"?"Desactivar":"Activar"}</button>}
+              {isAdmin() && <button onClick={()=>setDel(c.id)} className="px-2.5 text-xs font-semibold text-rose-500 bg-rose-50 rounded-lg py-1.5 hover:bg-rose-100 transition-colors">{I.trash}</button>}
             </div>
           </div>
         ))}
@@ -3809,10 +3827,10 @@ function PartesTrabajoPage({ data, up }) {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-0.5 flex-wrap">
                         <button onClick={()=>handleImprimir(p)} className="p-1.5 rounded-lg hover:bg-emerald-50 text-gray-400 hover:text-emerald-600 transition-colors" title="PDF / Imprimir">{printIcon}</button>
-                        <button onClick={()=>openEdit(p)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Editar">{I.edit}</button>
-                        <button onClick={()=>openDuplicar(p)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Duplicar">{I.duplicate}</button>
-                        {p.estado!=="finalizado" && <button onClick={()=>handleFinalizar(p)} className="px-2 py-1 rounded-lg hover:bg-emerald-50 text-[10px] font-bold text-emerald-600 bg-emerald-50/50 transition-colors" title="Marcar finalizado">Finalizar</button>}
-                        <button onClick={()=>setDel(p.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors" title="Eliminar">{I.trash}</button>
+                        {isAdmin() && <button onClick={()=>openEdit(p)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors" title="Editar">{I.edit}</button>}
+                        {isAdmin() && <button onClick={()=>openDuplicar(p)} className="p-1.5 rounded-lg hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors" title="Duplicar">{I.duplicate}</button>}
+                        {isAdmin() && p.estado!=="finalizado" && <button onClick={()=>handleFinalizar(p)} className="px-2 py-1 rounded-lg hover:bg-emerald-50 text-[10px] font-bold text-emerald-600 bg-emerald-50/50 transition-colors" title="Marcar finalizado">Finalizar</button>}
+                        {isAdmin() && <button onClick={()=>setDel(p.id)} className="p-1.5 rounded-lg hover:bg-rose-50 text-gray-400 hover:text-rose-500 transition-colors" title="Eliminar">{I.trash}</button>}
                       </div>
                     </td>
                   </tr>
